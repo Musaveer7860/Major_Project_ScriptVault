@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ScriptVault - Automated Multi-Language Code Snippet Manager</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/style.css?v=4">
+</head>
+<body>
+    <div class="landing-hero">
+        <h1 class="brand-title">
+            <i class="fa-solid fa-vault"></i> SCRIPTVAULT
+        </h1>
+        <p class="landing-tagline">
+            Secure cloud-based workspace to store, organize, search, and instantly deploy code snippets in multiple programming languages.
+        </p>
+        
+        <div class="hero-actions">
+            <a href="/register" class="btn btn-primary">
+                <i class="fa-solid fa-user-plus"></i> Create Free Account
+            </a>
+            <a href="/login" class="btn btn-secondary">
+                <i class="fa-solid fa-arrow-right-to-bracket"></i> Sign In to Vault
+            </a>
+        </div>
+
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fa-solid fa-code"></i>
+                </div>
+                <h3>Multi-Language Syntax</h3>
+                <p>Full support for Python, Java, C, C++, JavaScript, HTML, CSS, and SQL with real-time highlighting powered by Prism.js.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                </div>
+                <h3>Smart Full-Text Search</h3>
+                <p>Powered by MongoDB full-text index. Find snippets quickly by search terms in titles, tags, or raw source code.</p>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fa-solid fa-shield-halved"></i>
+                </div>
+                <h3>XSS & Password Security</h3>
+                <p>Hashed credentials via Bcrypt, regex inputs, and auto sanitization filters that protect snippet files from malicious scripts.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fa-solid fa-copy"></i>
+                </div>
+                <h3>One-Click Clone & Copy</h3>
+                <p>Duplicate structural templates instantaneously or click to copy snippet contents directly to your system clipboard.</p>
+            </div>
+        </div>
+    </div>
+
+    <footer class="landing-footer">
+        <p>ScriptVault Copy Rights Reserved 2026</p>
+    </footer>
+
+    <script>
+        if (localStorage.getItem("user")) {
+            window.location.href = "/dashboard";
+        }
+    </script>
+</body>
+</html>

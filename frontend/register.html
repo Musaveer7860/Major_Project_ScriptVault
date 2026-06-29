@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - ScriptVault</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/style.css?v=4">
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <h1 class="sidebar-logo" style="justify-content: center; font-size: 2rem; margin-bottom: 0.75rem;">
+                    <i class="fa-solid fa-vault"></i> SCRIPTVAULT
+                </h1>
+                <h2>Create Account</h2>
+                <p>Register to start organizing your codebase</p>
+            </div>
+            
+            <form id="register-form">
+                <div class="form-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" class="form-control" required placeholder="3-20 characters, alphanumeric">
+                </div>
+                
+                <div class="form-group">
+                    <label for="email">Email Address</label>
+                    <input type="email" id="email" class="form-control" required placeholder="name@gmail.com">
+                </div>
+                
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" class="form-control" required placeholder="••••••••">
+                    <div class="password-checklist">
+                        <div class="password-checklist-item" id="req-length">
+                            <i class="fa-regular fa-circle-dot"></i> Minimum 8 characters
+                        </div>
+                        <div class="password-checklist-item" id="req-letter">
+                            <i class="fa-regular fa-circle-dot"></i> Contains at least one letter
+                        </div>
+                        <div class="password-checklist-item" id="req-number">
+                            <i class="fa-regular fa-circle-dot"></i> Contains at least one number
+                        </div>
+                    </div>
+                </div>
+                
+                <button type="submit" id="btn-register" class="btn btn-primary" style="width: 100%; margin-top: 1rem;" disabled>
+                    <i class="fa-solid fa-user-plus"></i> Register
+                </button>
+            </form>
+            
+            <div class="auth-footer">
+                Already have an account? <a href="/login">Sign in instead</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="js/auth.js"></script>
+    <script>
+        if (localStorage.getItem("user")) {
+            window.location.href = "/dashboard";
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+# Virtual environments
+backend/.venv/
+backend/clean_venv/
+.venv/
+venv/
+ENV/
+env/
+
+# Python cache and compiled files
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# Environment variables
+backend/.env
+.env
+
+# Editor settings
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# OS metadata
+Thumbs.db
+Desktop.ini
+.DS_Store
