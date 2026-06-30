@@ -1597,8 +1597,14 @@ async function openAiModal(snippetId, code, language) {
             return;
         }
         if (!response.ok) {
-            const data = await response.json();
-            throw new Error(data.detail || "AI analysis failed.");
+            let errorMsg = "AI analysis failed.";
+            try {
+                const data = await response.json();
+                errorMsg = data.detail || errorMsg;
+            } catch (jsonErr) {
+                errorMsg = `Server error (${response.status}): ${response.statusText || "Internal Server Error"}`;
+            }
+            throw new Error(errorMsg);
         }
         
         currentAiAnalysis = await response.json();
