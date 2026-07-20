@@ -98,6 +98,26 @@ class SnippetAIAnalyzeSchema(BaseModel):
     language: str
     id: Optional[str] = None
 
+class NoteCreateSchema(BaseModel):
+    title: str = Field(..., min_length=1, max_length=100)
+    content: str = Field("")
+    workspace_id: str
+
+class NoteUpdateSchema(BaseModel):
+    title: Optional[str] = Field(None, min_length=1, max_length=100)
+    content: Optional[str] = None
+
+def format_note(note) -> dict:
+    return {
+        "id": str(note["_id"]),
+        "title": note["title"],
+        "content": note.get("content", ""),
+        "workspace_id": str(note["workspace_id"]) if note.get("workspace_id") else None,
+        "created_at": note["created_at"].isoformat() if isinstance(note["created_at"], datetime) else note["created_at"],
+        "updated_at": note.get("updated_at", note["created_at"]).isoformat() if isinstance(note.get("updated_at", note["created_at"]), datetime) else note.get("updated_at", note["created_at"]),
+        "user_id": str(note["user_id"])
+    }
+
 def format_snippet(snippet) -> dict:
     return {
         "id": str(snippet["_id"]),
@@ -932,6 +952,129 @@ async def update_user_profile(payload: UserProfileUpdateSchema, current_user: di
         )
 
 # ==========================================
+# NOTES ENDPOINTS
+# ==========================================
+
+@router.get("/notes")
+async def get_notes(
+    workspace_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    db = get_db()
+    user_uid = ObjectId(current_user["_id"])
+    
+    query = {"user_id": user_uid}
+    if workspace_id:
+        try:
+            query["workspace_id"] = ObjectId(workspace_id)
+        except Exception:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid workspace ID.")
+            
+    notes_cursor = db.notes.find(query).sort("updated_at", -1)
+    return [format_note(n) for n in notes_cursor]
+
+@router.post("/notes", status_code=status.HTTP_201_CREATED)
+async def create_note(payload: NoteCreateSchema, current_user: dict = Depends(get_current_user)):
+    db = get_db()
+    user_uid = ObjectId(current_user["_id"])
+    
+    try:
+        ws_oid = ObjectId(payload.workspace_id)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid workspace ID.")
+        
+    clean_title = sanitize_text(payload.title)
+    now = datetime.utcnow()
+    
+    note_doc = {
+        "user_id": user_uid,
+        "workspace_id": ws_oid,
+        "title": clean_title,
+        "content": payload.content,
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    try:
+        result = db.notes.insert_one(note_doc)
+        note_doc["_id"] = result.inserted_id
+        return format_note(note_doc)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error during note creation: {str(e)}"
+        )
+
+@router.get("/note/{id}")
+async def get_note(id: str, current_user: dict = Depends(get_current_user)):
+    db = get_db()
+    try:
+        obj_id = ObjectId(id)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid note ID format.")
+        
+    note = db.notes.find_one({"_id": obj_id, "user_id": ObjectId(current_user["_id"])})
+    if not note:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note not found.")
+        
+    return format_note(note)
+
+@router.put("/note/{id}")
+async def update_note(id: str, payload: NoteUpdateSchema, current_user: dict = Depends(get_current_user)):
+    db = get_db()
+    try:
+        obj_id = ObjectId(id)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid note ID format.")
+        
+    note = db.notes.find_one({"_id": obj_id, "user_id": ObjectId(current_user["_id"])})
+    if not note:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note not found or unauthorized.")
+        
+    update_data = {}
+    if payload.title is not None:
+        update_data["title"] = sanitize_text(payload.title)
+    if payload.content is not None:
+        update_data["content"] = payload.content
+        
+    if not update_data:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields provided to update.")
+        
+    now = datetime.utcnow()
+    update_data["updated_at"] = now
+    
+    try:
+        db.notes.update_one({"_id": obj_id}, {"$set": update_data})
+        updated_doc = db.notes.find_one({"_id": obj_id})
+        return format_note(updated_doc)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error during note update: {str(e)}"
+        )
+
+@router.delete("/note/{id}")
+async def delete_note(id: str, current_user: dict = Depends(get_current_user)):
+    db = get_db()
+    try:
+        obj_id = ObjectId(id)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid note ID format.")
+        
+    note = db.notes.find_one({"_id": obj_id, "user_id": ObjectId(current_user["_id"])})
+    if not note:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Note not found or unauthorized.")
+        
+    try:
+        db.notes.delete_one({"_id": obj_id})
+        return {"message": "Note deleted successfully."}
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database error during note deletion: {str(e)}"
+        )
+
+# ==========================================
 # WORKSPACE & COLLECTIONS ENDPOINTS
 # ==========================================
 
@@ -1003,6 +1146,7 @@ async def delete_workspace(id: str, current_user: dict = Depends(get_current_use
     db.workspaces.delete_one({"_id": ws_oid})
     db.collections.delete_many({"workspace_id": ws_oid})
     db.snippets.delete_many({"workspace_id": ws_oid})
+    db.notes.delete_many({"workspace_id": ws_oid})
     
     return {"message": "Workspace and all scoped snippets deleted successfully."}
 

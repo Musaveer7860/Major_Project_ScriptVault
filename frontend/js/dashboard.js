@@ -10,6 +10,46 @@ let activeWorkspaceId = localStorage.getItem("activeWorkspaceId") || "";
 let activeCollectionId = localStorage.getItem("activeCollectionId") || "none";
 let allSnippets = [];
 
+let currentView = "snippets";
+let allNotes = [];
+let activeNoteId = null;
+let noteSearchQuery = "";
+let noteAutosaveTimer = null;
+let playgroundEditor = null;
+let activePlaygroundLang = "Python";
+
+function switchView(viewName) {
+    currentView = viewName;
+    
+    // Update sidebar navigation
+    const navItems = document.querySelectorAll(".sidebar-nav .nav-item");
+    navItems.forEach(item => item.classList.remove("active"));
+    
+    const activeNav = document.getElementById(`nav-${viewName}`);
+    if (activeNav) activeNav.classList.add("active");
+    
+    // Toggle view containers
+    const viewSnippets = document.getElementById("snippets-view");
+    const viewNotes = document.getElementById("notes-view");
+    const viewPlayground = document.getElementById("playground-view");
+    
+    viewSnippets.style.display = "none";
+    viewNotes.style.display = "none";
+    viewPlayground.style.display = "none";
+    
+    if (viewName === "snippets") {
+        viewSnippets.style.display = "block";
+        fetchSnippets();
+    } else if (viewName === "notes") {
+        viewNotes.style.display = "block";
+        fetchNotes();
+        selectNote(null);
+    } else if (viewName === "playground") {
+        viewPlayground.style.display = "block";
+        initPlayground();
+    }
+}
+
 const userStr = localStorage.getItem("user");
 if (!userStr) {
     window.location.href = "/login";
@@ -369,6 +409,20 @@ function renderCollections(collections) {
 }
 
 function filterCollection(collId) {
+    if (currentView !== "snippets") {
+        currentView = "snippets";
+        document.getElementById("snippets-view").style.display = "block";
+        document.getElementById("notes-view").style.display = "none";
+        document.getElementById("playground-view").style.display = "none";
+    }
+    
+    // Reset active sidebar items
+    const navItems = document.querySelectorAll(".sidebar-nav .nav-item");
+    navItems.forEach(item => item.classList.remove("active"));
+    
+    const activeNav = document.getElementById("nav-snippets");
+    if (activeNav) activeNav.classList.add("active");
+
     activeCollectionId = collId;
     localStorage.setItem("activeCollectionId", collId);
     
@@ -378,13 +432,6 @@ function filterCollection(collId) {
     currentTag = "";
     currentSearch = "";
     document.getElementById("search-bar").value = "";
-    
-    const sidebar = document.querySelector(".sidebar-nav");
-    if (sidebar) {
-        const buttons = sidebar.querySelectorAll(".nav-item");
-        buttons.forEach(b => b.classList.remove("active"));
-        document.getElementById("filter-all").classList.add("active");
-    }
 
     document.getElementById("dashboard-title").textContent = "All Snippets";
 
@@ -408,13 +455,24 @@ async function switchWorkspace(wsId) {
     if (sidebar) {
         const buttons = sidebar.querySelectorAll(".nav-item");
         buttons.forEach(btn => btn.classList.remove("active"));
-        const allBtn = document.getElementById("filter-all");
-        if (allBtn) allBtn.classList.add("active");
+        
+        const viewBtn = document.getElementById(`nav-${currentView}`);
+        if (viewBtn) viewBtn.classList.add("active");
+        
+        if (currentView === "snippets") {
+            const allBtn = document.getElementById("filter-all");
+            if (allBtn) allBtn.classList.add("active");
+        }
     }
     document.getElementById("search-bar").value = "";
     document.getElementById("dashboard-title").textContent = "All Snippets";
 
     await loadWorkspaceData();
+    
+    if (currentView === "notes") {
+        await fetchNotes();
+        selectNote(null);
+    }
 }
 
 function openNewWorkspaceModal() {
@@ -924,6 +982,13 @@ function handleSortChange(val) {
 }
 
 function filterLanguage(lang) {
+    if (currentView !== "snippets") {
+        currentView = "snippets";
+        document.getElementById("snippets-view").style.display = "block";
+        document.getElementById("notes-view").style.display = "none";
+        document.getElementById("playground-view").style.display = "none";
+    }
+
     currentLanguage = lang;
     currentTag = "";
     showArchived = false;
@@ -934,6 +999,9 @@ function filterLanguage(lang) {
     const sidebar = document.querySelector(".sidebar-nav");
     const buttons = sidebar.querySelectorAll(".nav-item");
     buttons.forEach(btn => btn.classList.remove("active"));
+    
+    const activeNav = document.getElementById("nav-snippets");
+    if (activeNav) activeNav.classList.add("active");
     
     const activeId = lang ? `filter-${lang.toLowerCase().replace('+', 'p')}` : 'filter-all';
     const activeBtn = document.getElementById(activeId);
@@ -946,6 +1014,13 @@ function filterLanguage(lang) {
 }
 
 function filterTag(tagName) {
+    if (currentView !== "snippets") {
+        currentView = "snippets";
+        document.getElementById("snippets-view").style.display = "block";
+        document.getElementById("notes-view").style.display = "none";
+        document.getElementById("playground-view").style.display = "none";
+    }
+
     currentTag = tagName;
     showArchived = false;
     
@@ -955,6 +1030,9 @@ function filterTag(tagName) {
     const sidebar = document.querySelector(".sidebar-nav");
     const buttons = sidebar.querySelectorAll(".nav-item");
     buttons.forEach(btn => btn.classList.remove("active"));
+    
+    const activeNav = document.getElementById("nav-snippets");
+    if (activeNav) activeNav.classList.add("active");
     
     fetchSnippets();
 }
@@ -1090,6 +1168,13 @@ async function executeSnippetCode() {
 // ==========================================
 
 function toggleFavoritesFilter() {
+    if (currentView !== "snippets") {
+        currentView = "snippets";
+        document.getElementById("snippets-view").style.display = "block";
+        document.getElementById("notes-view").style.display = "none";
+        document.getElementById("playground-view").style.display = "none";
+    }
+
     currentFilterFavorites = !currentFilterFavorites;
     
     const btn = document.getElementById("filter-favorites");
@@ -1104,6 +1189,9 @@ function toggleFavoritesFilter() {
     const sidebar = document.querySelector(".sidebar-nav");
     const buttons = sidebar.querySelectorAll(".nav-item");
     buttons.forEach(b => b.classList.remove("active"));
+    
+    const activeNav = document.getElementById("nav-snippets");
+    if (activeNav) activeNav.classList.add("active");
     
     if (currentFilterFavorites) {
         btn.classList.add("active");
@@ -1805,6 +1893,13 @@ function clearNotifications() {
 }
 
 function toggleArchivedFilter() {
+    if (currentView !== "snippets") {
+        currentView = "snippets";
+        document.getElementById("snippets-view").style.display = "block";
+        document.getElementById("notes-view").style.display = "none";
+        document.getElementById("playground-view").style.display = "none";
+    }
+
     showArchived = !showArchived;
     
     const btn = document.getElementById("filter-archived");
@@ -1819,6 +1914,9 @@ function toggleArchivedFilter() {
     const sidebar = document.querySelector(".sidebar-nav");
     const buttons = sidebar.querySelectorAll(".nav-item");
     buttons.forEach(b => b.classList.remove("active"));
+    
+    const activeNav = document.getElementById("nav-snippets");
+    if (activeNav) activeNav.classList.add("active");
     
     if (showArchived) {
         if (btn) btn.classList.add("active");
@@ -1885,5 +1983,498 @@ async function toggleArchive(snippetId, btn) {
         fetchSnippets();
     } catch (err) {
         showToast(err.message, "error");
+    }
+}
+
+// ==========================================
+// NOTES MANAGEMENT CONTROLLER
+// ==========================================
+
+async function fetchNotes() {
+    try {
+        const response = await fetch(`/notes?workspace_id=${activeWorkspaceId}`);
+        if (response.status === 401) {
+            handleLogout();
+            return;
+        }
+        if (!response.ok) throw new Error("Failed to fetch notes.");
+        const notes = await response.json();
+        allNotes = notes;
+        renderNotesList();
+    } catch (err) {
+        showToast(err.message, "error");
+    }
+}
+
+function renderNotesList() {
+    const listDiv = document.getElementById("notes-list-container");
+    if (!listDiv) return;
+
+    listDiv.innerHTML = "";
+    
+    let filtered = allNotes;
+    if (noteSearchQuery) {
+        const q = noteSearchQuery.toLowerCase();
+        filtered = filtered.filter(n => 
+            n.title.toLowerCase().includes(q) || 
+            n.content.toLowerCase().includes(q)
+        );
+    }
+    
+    if (filtered.length === 0) {
+        listDiv.innerHTML = `
+            <div style="text-align: center; padding: 2rem 1rem; color: var(--text-muted); font-size: 0.8rem;">
+                No notes found
+            </div>
+        `;
+        return;
+    }
+    
+    filtered.forEach(note => {
+        const date = new Date(note.updated_at);
+        const formattedDate = date.toLocaleDateString(undefined, { 
+            month: 'short', 
+            day: 'numeric', 
+            hour: '2-digit', 
+            minute: '2-digit' 
+        });
+        
+        const noteSnippet = note.content ? note.content.substring(0, 60).replace(/[\#\*\_`\-\n]/g, " ") : "No content";
+        const isActive = activeNoteId === note.id;
+        
+        const btn = document.createElement("button");
+        btn.className = `note-item ${isActive ? 'active' : ''}`;
+        btn.innerHTML = `
+            <div class="note-item-title">${escapeHtml(note.title || "Untitled Note")}</div>
+            <div class="note-item-snippet">${escapeHtml(noteSnippet)}</div>
+            <div class="note-item-date">${formattedDate}</div>
+        `;
+        btn.onclick = () => selectNote(note.id);
+        listDiv.appendChild(btn);
+    });
+}
+
+function handleNoteSearch(query) {
+    noteSearchQuery = query;
+    renderNotesList();
+}
+
+async function selectNote(noteId) {
+    if (noteAutosaveTimer) {
+        clearTimeout(noteAutosaveTimer);
+        await saveCurrentNote();
+    }
+    
+    activeNoteId = noteId;
+    renderNotesList();
+    
+    const emptyState = document.getElementById("note-editor-empty-state");
+    const activeState = document.getElementById("note-editor-active-state");
+    
+    if (!noteId) {
+        emptyState.style.display = "flex";
+        activeState.style.display = "none";
+        return;
+    }
+    
+    emptyState.style.display = "none";
+    activeState.style.display = "flex";
+    
+    try {
+        const response = await fetch(`/note/${noteId}`);
+        if (response.status === 401) {
+            handleLogout();
+            return;
+        }
+        if (!response.ok) throw new Error("Failed to load note details.");
+        const note = await response.json();
+        
+        document.getElementById("note-title-input").value = note.title || "";
+        document.getElementById("note-content-input").value = note.content || "";
+        
+        // Reset view tab to edit mode
+        toggleNoteTab('edit');
+        document.getElementById("note-save-status").textContent = "";
+    } catch (err) {
+        showToast(err.message, "error");
+    }
+}
+
+async function createNewNote() {
+    try {
+        const response = await fetch("/notes", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                title: "Untitled Note",
+                content: "",
+                workspace_id: activeWorkspaceId
+            })
+        });
+        
+        if (response.status === 401) {
+            handleLogout();
+            return;
+        }
+        
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "Failed to create note.");
+        
+        showToast("Note created", "success");
+        activeNoteId = data.id;
+        await fetchNotes();
+        selectNote(data.id);
+    } catch (err) {
+        showToast(err.message, "error");
+    }
+}
+
+async function saveCurrentNote() {
+    if (!activeNoteId) return;
+    
+    const title = document.getElementById("note-title-input").value.trim() || "Untitled Note";
+    const content = document.getElementById("note-content-input").value;
+    
+    const saveStatus = document.getElementById("note-save-status");
+    if (saveStatus) saveStatus.textContent = "Saving...";
+    
+    try {
+        const response = await fetch(`/note/${activeNoteId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title, content })
+        });
+        
+        if (response.status === 401) {
+            handleLogout();
+            return;
+        }
+        
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "Failed to save note.");
+        
+        if (saveStatus) saveStatus.textContent = "Saved";
+        
+        // Quietly refresh list to update title/snippets without deselection
+        const notesResp = await fetch(`/notes?workspace_id=${activeWorkspaceId}`);
+        if (notesResp.ok) {
+            allNotes = await notesResp.json();
+            renderNotesList();
+        }
+    } catch (err) {
+        if (saveStatus) saveStatus.textContent = "Error saving";
+        showToast(err.message, "error");
+    }
+}
+
+function onNoteContentChange() {
+    const saveStatus = document.getElementById("note-save-status");
+    if (saveStatus) saveStatus.textContent = "Unsaved changes";
+    
+    if (noteAutosaveTimer) clearTimeout(noteAutosaveTimer);
+    
+    // Autosave after 2 seconds of inactivity
+    noteAutosaveTimer = setTimeout(() => {
+        saveCurrentNote();
+    }, 2000);
+}
+
+async function deleteCurrentNote() {
+    if (!activeNoteId) return;
+    if (!confirm("Are you sure you want to delete this note?")) return;
+    
+    if (noteAutosaveTimer) clearTimeout(noteAutosaveTimer);
+    
+    try {
+        const response = await fetch(`/note/${activeNoteId}`, {
+            method: "DELETE"
+        });
+        
+        if (response.status === 401) {
+            handleLogout();
+            return;
+        }
+        
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.detail || "Failed to delete note.");
+        }
+        
+        showToast("Note deleted", "info");
+        activeNoteId = null;
+        await fetchNotes();
+        selectNote(null);
+    } catch (err) {
+        showToast(err.message, "error");
+    }
+}
+
+function toggleNoteTab(tabName) {
+    const btnEdit = document.getElementById("note-btn-edit");
+    const btnPreview = document.getElementById("note-btn-preview");
+    const editPane = document.getElementById("note-edit-pane");
+    const previewPane = document.getElementById("note-preview-pane");
+    
+    if (tabName === 'edit') {
+        btnEdit.classList.add("active");
+        btnPreview.classList.remove("active");
+        editPane.style.display = "flex";
+        previewPane.style.display = "none";
+    } else {
+        btnEdit.classList.remove("active");
+        btnPreview.classList.add("active");
+        editPane.style.display = "none";
+        previewPane.style.display = "block";
+        
+        // Render Markdown content
+        const markdownContent = document.getElementById("note-content-input").value;
+        if (window.marked) {
+            previewPane.innerHTML = marked.parse(markdownContent || "*No content written yet.*");
+        } else {
+            previewPane.innerHTML = escapeHtml(markdownContent || "No content").replace(/\n/g, "<br>");
+        }
+    }
+}
+
+// ==========================================
+// PLAYGROUND IDE CONTROLLER
+// ==========================================
+
+function initPlayground() {
+    if (playgroundEditor) return; // already initialized
+    
+    const container = document.getElementById('playground-monaco-container');
+    if (!container) return;
+    
+    if (typeof monaco === 'undefined') {
+        setTimeout(initPlayground, 100);
+        return;
+    }
+    
+    const initialCode = `// ScriptVault Code Playground\n// Write code here and click "Run Code" to run without saving.\n\nfunction greet() {\n    console.log("Hello, ScriptVault Playground!");\n}\n\ngreet();`;
+    
+    playgroundEditor = monaco.editor.create(container, {
+        value: initialCode,
+        language: 'javascript',
+        theme: 'vs-dark',
+        automaticLayout: true,
+        fontSize: 13,
+        fontFamily: "var(--font-code)",
+        minimap: { enabled: false },
+        suggestOnTriggerCharacters: true,
+        quickSuggestions: { other: true, comments: true, strings: true },
+        wordBasedSuggestions: true,
+        snippetSuggestions: "inline"
+    });
+    
+    activePlaygroundLang = "JavaScript";
+    document.getElementById("playground-lang").value = "JavaScript";
+    updatePlaygroundPreviewTabVisibility();
+}
+
+function changePlaygroundLanguage(lang) {
+    activePlaygroundLang = lang;
+    if (!playgroundEditor) return;
+    
+    const model = playgroundEditor.getModel();
+    if (!model) return;
+    
+    const MONACO_LANG_MAP = {
+        "Python": "python",
+        "JavaScript": "javascript",
+        "Java": "java",
+        "C": "c",
+        "C++": "cpp",
+        "HTML": "html",
+        "CSS": "css",
+        "SQL": "sql"
+    };
+    
+    const monacoLang = MONACO_LANG_MAP[lang] || "plaintext";
+    monaco.editor.setModelLanguage(model, monacoLang);
+    
+    const currentVal = playgroundEditor.getValue();
+    const commentOnlyRegex = /^(?:\/\/|#).*$/gm;
+    if (!currentVal || currentVal.replace(commentOnlyRegex, "").trim() === "") {
+        let template = "";
+        if (lang === "Python") {
+            template = "# Python Playground Scratchpad\nprint('Hello from Python!')";
+        } else if (lang === "JavaScript") {
+            template = "// Javascript Playground Scratchpad\nconsole.log('Hello from Javascript!');";
+        } else if (lang === "Java") {
+            template = "// Java Playground Scratchpad\npublic class Main {\n    public static void main(String[] args) {\n        System.out.println(\"Hello from Java!\");\n    }\n}";
+        } else if (lang === "C") {
+            template = "/* C Playground Scratchpad */\n#include <stdio.h>\n\nint main() {\n    printf(\"Hello from C!\\n\");\n    return 0;\n}";
+        } else if (lang === "C++") {
+            template = "/* C++ Playground Scratchpad */\n#include <iostream>\n\nint main() {\n    std::cout << \"Hello from C++!\\n\";\n    return 0;\n}";
+        } else if (lang === "HTML") {
+            template = "<!-- HTML Playground Scratchpad -->\n<!DOCTYPE html>\n<html>\n<head>\n    <style>\n        body { font-family: sans-serif; background: #eef2f6; text-align: center; padding: 2rem; }\n    </style>\n</head>\n<body>\n    <h1>Hello from Web Live Preview!</h1>\n    <p>Modify code and click Run Code to update this view.</p>\n</body>\n</html>";
+        }
+        playgroundEditor.setValue(template);
+    }
+    
+    updatePlaygroundPreviewTabVisibility();
+}
+
+function updatePlaygroundPreviewTabVisibility() {
+    const previewBtn = document.getElementById("pg-tab-btn-preview");
+    if (["JavaScript", "HTML", "CSS"].includes(activePlaygroundLang)) {
+        previewBtn.style.display = "flex";
+    } else {
+        previewBtn.style.display = "none";
+        const activeTab = document.querySelector(".playground-tab-btn.active");
+        if (activeTab && activeTab.id === "pg-tab-btn-preview") {
+            switchPlaygroundTab("output");
+        }
+    }
+}
+
+function changePlaygroundTheme(theme) {
+    if (typeof monaco !== 'undefined') {
+        monaco.editor.setTheme(theme);
+    }
+}
+
+function switchPlaygroundTab(tabName) {
+    const btnOutput = document.getElementById("pg-tab-btn-output");
+    const btnInput = document.getElementById("pg-tab-btn-input");
+    const btnPreview = document.getElementById("pg-tab-btn-preview");
+    
+    const paneOutput = document.getElementById("pg-tab-pane-output");
+    const paneInput = document.getElementById("pg-tab-pane-input");
+    const panePreview = document.getElementById("pg-tab-pane-preview");
+    
+    btnOutput.classList.remove("active");
+    btnInput.classList.remove("active");
+    btnPreview.classList.remove("active");
+    
+    paneOutput.style.display = "none";
+    paneInput.style.display = "none";
+    panePreview.style.display = "none";
+    
+    if (tabName === "output") {
+        btnOutput.classList.add("active");
+        paneOutput.style.display = "flex";
+    } else if (tabName === "input") {
+        btnInput.classList.add("active");
+        paneInput.style.display = "flex";
+    } else if (tabName === "preview") {
+        btnPreview.classList.add("active");
+        panePreview.style.display = "flex";
+    }
+}
+
+async function runPlaygroundCode() {
+    if (!playgroundEditor) return;
+    
+    const code = playgroundEditor.getValue();
+    const lang = activePlaygroundLang;
+    const stdin = document.getElementById("playground-stdin").value;
+    
+    const statusSpan = document.getElementById("playground-run-status");
+    const outputConsole = document.getElementById("playground-console-output");
+    
+    statusSpan.textContent = "Executing...";
+    outputConsole.textContent = "Running program...\n";
+    outputConsole.style.color = "#a3e635";
+    
+    if (["javascript", "html", "css"].includes(lang.toLowerCase())) {
+        switchPlaygroundTab("preview");
+        const iframe = document.getElementById("playground-web-preview");
+        if (lang.toLowerCase() === "html") {
+            iframe.srcdoc = code;
+        } else if (lang.toLowerCase() === "javascript") {
+            iframe.srcdoc = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <style>
+                        body { background: #000; color: #fff; font-family: monospace; padding: 10px; font-size: 13px; }
+                        #console { white-space: pre-wrap; line-height: 1.5; }
+                    </style>
+                </head>
+                <body>
+                    <div id="console"></div>
+                    <script>
+                        const _log = console.log;
+                        const consoleDiv = document.getElementById('console');
+                        console.log = function(...args) {
+                            consoleDiv.innerHTML += args.join(' ') + '\\n';
+                            _log.apply(console, args);
+                        };
+                        console.error = function(...args) {
+                            consoleDiv.innerHTML += '<span style="color: #ef4444;">[ERROR] ' + args.join(' ') + '</span>\\n';
+                        };
+                        try {
+                            ${code}
+                        } catch(err) {
+                            console.error(err.message);
+                        }
+                    </script>
+                </body>
+                </html>
+            `;
+        } else if (lang.toLowerCase() === "css") {
+            iframe.srcdoc = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <style>${code}</style>
+                </head>
+                <body>
+                    <h1 style="text-align:center;">CSS Preview Sandbox</h1>
+                    <div style="max-width:400px; margin:20px auto; padding:20px; border:1px solid #ccc; border-radius:5px;">
+                        <h3>Styled Elements</h3>
+                        <p>This sandbox renders your CSS code globally.</p>
+                        <button style="padding:5px 10px;">Sample Button</button>
+                    </div>
+                </body>
+                </html>
+            `;
+        }
+        
+        statusSpan.textContent = "Rendered";
+        outputConsole.textContent = "Rendered inside Live Preview tab.";
+        return;
+    }
+    
+    try {
+        const response = await fetch("/snippets/run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                code: code,
+                language: lang,
+                input: stdin
+            })
+        });
+        
+        if (response.status === 401) {
+            handleLogout();
+            return;
+        }
+        
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "Execution request failed.");
+        
+        let terminalText = "";
+        if (data.stderr) {
+            terminalText += `[STDERR]\n${data.stderr}\n`;
+            outputConsole.style.color = "#fca5a5";
+        }
+        if (data.stdout !== undefined) {
+            terminalText += data.stdout;
+        }
+        
+        if (!data.stderr && !data.stdout) {
+            terminalText = "(No output program terminated successfully)";
+        }
+        
+        outputConsole.textContent = terminalText;
+        statusSpan.textContent = `Completed (exit code ${data.exit_code})`;
+    } catch (err) {
+        statusSpan.textContent = "Error executing";
+        outputConsole.textContent = `Execution Error: ${err.message}`;
+        outputConsole.style.color = "#fca5a5";
     }
 }
