@@ -795,6 +795,9 @@ function createSnippetCard(snippet) {
                     <button class="btn btn-primary btn-icon" style="padding: 0.35rem 0.6rem; font-size: 0.75rem;" title="Run / Test code" onclick="openRunModal('${escapeHtml(snippet.title)}', ${JSON.stringify(snippet.code).replace(/"/g, '&quot;')}, '${snippet.language}')">
                         <i class="fa-solid fa-play"></i> Run
                     </button>
+                    <button class="btn btn-secondary btn-icon" style="padding: 0.35rem 0.6rem; font-size: 0.75rem; color: #6366f1;" title="Share snippet" onclick="openShareModal('snippet', '${snippet.id}')">
+                        <i class="fa-solid fa-share-nodes"></i> Share
+                    </button>
                     <div style="position: relative; display: inline-block;">
                         <button class="btn btn-secondary btn-icon" style="padding: 0.35rem 0.6rem; font-size: 0.75rem;" title="Export Snippet" onclick="toggleExportDropdown(this)">
                             <i class="fa-solid fa-download"></i> Export
@@ -2135,8 +2138,6 @@ async function createNewNote() {
 }
 
 async function saveCurrentNote() {
-    if (!activeNoteId) return;
-    
     const title = document.getElementById("note-title-input").value.trim() || "Untitled Note";
     const content = document.getElementById("note-content-input").value;
     
@@ -2144,6 +2145,25 @@ async function saveCurrentNote() {
     if (saveStatus) saveStatus.textContent = "Saving...";
     
     try {
+        if (!activeNoteId) {
+            const response = await fetch("/notes", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    title: title,
+                    content: content,
+                    workspace_id: activeWorkspaceId
+                })
+            });
+            if (response.status === 401) { handleLogout(); return; }
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.detail || "Failed to create note.");
+            activeNoteId = data.id;
+            await fetchNotes();
+            if (saveStatus) saveStatus.textContent = "Saved";
+            return;
+        }
+
         const response = await fetch(`/note/${activeNoteId}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
@@ -2949,7 +2969,7 @@ if (typeof onNoteContentChange === "function") {
 // ====================================================
 let currentShareObj = { type: 'note', id: null, title: '', content: '' };
 
-function openShareModal(type = 'note', id = null) {
+async function openShareModal(type = 'note', id = null) {
     const modal = document.getElementById("share-modal");
     if (!modal) return;
 
@@ -2958,20 +2978,27 @@ function openShareModal(type = 'note', id = null) {
     let contentText = "";
 
     if (type === 'note') {
-        targetId = activeNoteId;
+        if (!targetId) targetId = activeNoteId;
+        if (!targetId) {
+            await saveCurrentNote();
+            targetId = activeNoteId;
+        }
         const titleInput = document.getElementById("note-title-input");
         const contentInput = document.getElementById("note-content-input");
-        title = titleInput ? titleInput.value : "Shared Note";
+        title = (titleInput ? titleInput.value : "").trim() || "Shared Note";
         contentText = contentInput ? contentInput.value : "";
+    } else if (type === 'snippet') {
+        if (targetId) {
+            const snip = allSnippets.find(s => s.id === targetId);
+            if (snip) {
+                title = snip.title;
+                contentText = snip.code;
+            }
+        }
     } else if (type === 'sheet') {
         const titleInput = document.getElementById("excel-sheet-title");
-        title = titleInput ? titleInput.value : "Shared Spreadsheet";
+        title = (titleInput ? titleInput.value : "").trim() || "Shared Spreadsheet";
         contentText = JSON.stringify(excelGridData);
-    }
-
-    if (!targetId && type === 'note') {
-        showToast("Please save note first before sharing.", "warning");
-        return;
     }
 
     currentShareObj = { type, id: targetId, title, content: contentText };
@@ -2991,9 +3018,18 @@ function closeShareModal() {
 function copyShareModalLink() {
     const input = document.getElementById("share-modal-url");
     if (input) {
-        navigator.clipboard.writeText(input.value).then(() => {
+        input.select();
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(input.value).then(() => {
+                showToast("Share link copied to clipboard!", "success");
+            }).catch(() => {
+                document.execCommand('copy');
+                showToast("Share link copied to clipboard!", "success");
+            });
+        } else {
+            document.execCommand('copy');
             showToast("Share link copied to clipboard!", "success");
-        });
+        }
     }
 }
 
