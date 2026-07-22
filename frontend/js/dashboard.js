@@ -2265,6 +2265,17 @@ function toggleNoteTab(tabName) {
 // PLAYGROUND IDE CONTROLLER
 // ==========================================
 
+const PLAYGROUND_STARTER_TEMPLATES = {
+    "Python": `# Python Playground Scratchpad\n# Write code here and click "Run Code"\n\ndef greet(name):\n    return f"Hello {name}, welcome to Python!"\n\nprint(greet("Developer"))\n`,
+    "JavaScript": `// JavaScript Playground Scratchpad\n// Write code here and click "Run Code"\n\nfunction greet(name) {\n    console.log(\`Hello \${name}, welcome to JavaScript!\`);\n}\n\ngreet("Developer");\n`,
+    "Java": `// Java Playground Scratchpad\n// Main class must be named "Main"\n\npublic class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello Developer, welcome to Java!");\n    }\n}\n`,
+    "C": `/* C Playground Scratchpad */\n#include <stdio.h>\n\nint main() {\n    printf("Hello Developer, welcome to C!\\n");\n    return 0;\n}\n`,
+    "C++": `/* C++ Playground Scratchpad */\n#include <iostream>\n\nint main() {\n    std::cout << "Hello Developer, welcome to C++!" << std::endl;\n    return 0;\n}\n`,
+    "HTML": `<!-- HTML Web Live Preview Sandbox -->\n<!DOCTYPE html>\n<html>\n<head>\n    <style>\n        body {\n            font-family: system-ui, sans-serif;\n            background: #09090b;\n            color: #38bdf8;\n            text-align: center;\n            padding: 3rem;\n        }\n        h1 {\n            color: #818cf8;\n        }\n    </style>\n</head>\n<body>\n    <h1>Hello from Web Live Preview!</h1>\n    <p>Modify HTML/CSS code and check the Live Preview tab.</p>\n</body>\n</html>\n`,
+    "CSS": `/* CSS Playground Scratchpad */\nbody {\n    background-color: #09090b;\n    color: #f4f4f5;\n    font-family: system-ui, sans-serif;\n    padding: 20px;\n}\n\n.hero-card {\n    background: #18181b;\n    border: 1px solid #6366f1;\n    border-radius: 8px;\n    padding: 1.5rem;\n}\n`,
+    "SQL": `-- SQL Query Playground Scratchpad\nCREATE TABLE developers (\n    id INT PRIMARY KEY,\n    name VARCHAR(50),\n    language VARCHAR(50)\n);\n\nINSERT INTO developers VALUES (1, 'Musaveer', 'Python');\nSELECT * FROM developers;\n`
+};
+
 function initPlayground() {
     if (playgroundEditor) return; // already initialized
     
@@ -2276,7 +2287,7 @@ function initPlayground() {
         return;
     }
     
-    const initialCode = `// ScriptVault Code Playground\n// Write code here and click "Run Code" to run without saving.\n\nfunction greet() {\n    console.log("Hello, ScriptVault Playground!");\n}\n\ngreet();`;
+    const initialCode = PLAYGROUND_STARTER_TEMPLATES["JavaScript"];
     
     playgroundEditor = monaco.editor.create(container, {
         value: initialCode,
@@ -2319,26 +2330,18 @@ function changePlaygroundLanguage(lang) {
     monaco.editor.setModelLanguage(model, monacoLang);
     
     const currentVal = playgroundEditor.getValue();
-    const commentOnlyRegex = /^(?:\/\/|#).*$/gm;
-    if (!currentVal || currentVal.replace(commentOnlyRegex, "").trim() === "") {
-        let template = "";
-        if (lang === "Python") {
-            template = "# Python Playground Scratchpad\nprint('Hello from Python!')";
-        } else if (lang === "JavaScript") {
-            template = "// Javascript Playground Scratchpad\nconsole.log('Hello from Javascript!');";
-        } else if (lang === "Java") {
-            template = "// Java Playground Scratchpad\npublic class Main {\n    public static void main(String[] args) {\n        System.out.println(\"Hello from Java!\");\n    }\n}";
-        } else if (lang === "C") {
-            template = "/* C Playground Scratchpad */\n#include <stdio.h>\n\nint main() {\n    printf(\"Hello from C!\\n\");\n    return 0;\n}";
-        } else if (lang === "C++") {
-            template = "/* C++ Playground Scratchpad */\n#include <iostream>\n\nint main() {\n    std::cout << \"Hello from C++!\\n\";\n    return 0;\n}";
-        } else if (lang === "HTML") {
-            template = "<!-- HTML Playground Scratchpad -->\n<!DOCTYPE html>\n<html>\n<head>\n    <style>\n        body { font-family: sans-serif; background: #eef2f6; text-align: center; padding: 2rem; }\n    </style>\n</head>\n<body>\n    <h1>Hello from Web Live Preview!</h1>\n    <p>Modify code and click Run Code to update this view.</p>\n</body>\n</html>";
-        }
-        playgroundEditor.setValue(template);
+    const isStarterOrEmpty = !currentVal || 
+        Object.values(PLAYGROUND_STARTER_TEMPLATES).some(t => t.trim() === currentVal.trim()) ||
+        currentVal.includes("function greet()") ||
+        currentVal.replace(/^(?:\/\/|#|\/\*).*$/gm, "").trim() === "";
+
+    if (isStarterOrEmpty) {
+        const newTemplate = PLAYGROUND_STARTER_TEMPLATES[lang] || `// ${lang} Playground Scratchpad\n`;
+        playgroundEditor.setValue(newTemplate);
     }
     
     updatePlaygroundPreviewTabVisibility();
+    showToast(`Switched Playground to ${lang}`, "info");
 }
 
 function updatePlaygroundPreviewTabVisibility() {
@@ -3229,3 +3232,4 @@ window.exportAllNotesZip = exportAllNotesZip;
 window.importExcelFileToGrid = importExcelFileToGrid;
 window.exportGridToExcel = exportGridToExcel;
 window.exportGridToCSV = exportGridToCSV;
+window.changePlaygroundLanguage = changePlaygroundLanguage;
