@@ -6,10 +6,14 @@
     <title>Dashboard - ScriptVault</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
-    <link rel="stylesheet" href="css/style.css?v=5">
+    <link rel="stylesheet" href="css/style.css?v=6">
     <!-- Monaco Editor CSS & Loader -->
     <link rel="stylesheet" data-name="vs/editor/editor.main" href="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.39.0/min/vs/editor/editor.main.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.39.0/min/vs/loader.min.js"></script>
+    <!-- Excel (SheetJS), ZIP (JSZip), and PDF (html2pdf) libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
 <body>
     <div class="app-layout">
@@ -40,7 +44,10 @@
                     <i class="fa-solid fa-code" style="color: #6366f1;"></i> Code Snippets
                 </button>
                 <button class="nav-item" id="nav-notes" onclick="switchView('notes')">
-                    <i class="fa-solid fa-note-sticky" style="color: #0ea5e9;"></i> Saved Notes
+                    <i class="fa-solid fa-note-sticky" style="color: #0ea5e9;"></i> Saved Notepad
+                </button>
+                <button class="nav-item" id="nav-sheets" onclick="switchView('sheets')">
+                    <i class="fa-solid fa-file-excel" style="color: #107c41;"></i> Excel Sheets
                 </button>
                 <button class="nav-item" id="nav-playground" onclick="switchView('playground')">
                     <i class="fa-solid fa-laptop-code" style="color: #10b981;"></i> Code Playground
@@ -212,7 +219,7 @@
                     </div>
                 </div>
 
-                <!-- Saved Notes View Container -->
+                <!-- Saved Notepad View Container -->
                 <div id="notes-view" style="display: none;">
                     <div class="notes-container" style="display: grid; grid-template-columns: 300px 1fr; gap: 0; height: calc(100vh - 160px); background: #ffffff; border: 1px solid var(--border-color); border-radius: 6px; overflow: hidden;">
                         <aside class="notes-sidebar" style="border-right: 1px solid var(--border-color); display: flex; flex-direction: column; background: #fcfcfd; height: 100%;">
@@ -220,6 +227,14 @@
                                 <button class="btn btn-primary" style="width: 100%; justify-content: center;" onclick="createNewNote()">
                                     <i class="fa-solid fa-plus"></i> New Note
                                 </button>
+                                <div style="display: flex; gap: 0.35rem;">
+                                    <button class="btn btn-secondary" onclick="exportAllNotesExcel()" style="flex: 1; font-size: 0.75rem; padding: 0.3rem;" title="Export all notes to Excel">
+                                        <i class="fa-solid fa-file-excel" style="color: #107c41;"></i> Excel
+                                    </button>
+                                    <button class="btn btn-secondary" onclick="exportAllNotesZip()" style="flex: 1; font-size: 0.75rem; padding: 0.3rem;" title="Export all notes to ZIP">
+                                        <i class="fa-solid fa-file-zipper" style="color: #d97706;"></i> ZIP
+                                    </button>
+                                </div>
                                 <div style="position: relative; width: 100%;">
                                     <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 0.8rem;"></i>
                                     <input type="text" id="note-search-bar" class="form-control" placeholder="Search notes..." oninput="handleNoteSearch(this.value)" style="padding-left: 2.25rem; font-size: 0.8rem; height: 32px; width: 100%;">
@@ -230,43 +245,108 @@
                             </div>
                         </aside>
                         
-                        <main class="notes-editor-pane" style="height: 100%; display: flex; flex-direction: column; background: #ffffff;">
+                        <main class="notes-editor-pane" style="height: 100%; display: flex; flex-direction: column; background: #ffffff; position: relative;">
                             <div id="note-editor-empty-state" class="empty-state" style="height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 3rem; text-align: center; margin: auto 0;">
                                 <i class="fa-regular fa-note-sticky" style="font-size: 3.5rem; color: var(--text-muted); margin-bottom: 1rem;"></i>
                                 <h3 style="font-size: 1.1rem; font-weight: 600; color: #09090b; margin-bottom: 0.5rem;">No note selected</h3>
-                                <p style="font-size: 0.875rem; color: var(--text-secondary); max-width: 320px;">Select an existing note from the list, or create a brand new note to begin writing.</p>
+                                <p style="font-size: 0.875rem; color: var(--text-secondary); max-width: 320px;">Select an existing note from the list, or create a brand new note to begin writing in your Notepad.</p>
                             </div>
                             
                             <div id="note-editor-active-state" style="display: none; flex-direction: column; height: 100%;">
-                                <div class="note-editor-header" style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1.5rem; border-bottom: 1px solid var(--border-color); background: #fcfcfd; min-height: 52px;">
-                                    <div class="note-editor-tabs" style="display: flex; gap: 0.25rem;">
-                                        <button class="btn btn-secondary btn-icon active" id="note-btn-edit" onclick="toggleNoteTab('edit')" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; border-radius: 4px;">
-                                            <i class="fa-solid fa-pen"></i> Edit
+                                <div class="note-editor-header" style="display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 1rem; border-bottom: 1px solid var(--border-color); background: #fcfcfd; min-height: 48px; gap: 0.5rem; flex-wrap: wrap;">
+                                    <div class="note-editor-tabs" style="display: flex; gap: 0.25rem; align-items: center;">
+                                        <button class="btn btn-secondary btn-icon active" id="note-btn-edit" onclick="toggleNoteTab('edit')" style="padding: 0.35rem 0.65rem; font-size: 0.75rem; border-radius: 4px;">
+                                            <i class="fa-solid fa-pen"></i> Edit Note
                                         </button>
-                                        <button class="btn btn-secondary btn-icon" id="note-btn-preview" onclick="toggleNoteTab('preview')" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; border-radius: 4px;">
+                                        <button class="btn btn-secondary btn-icon" id="note-btn-preview" onclick="toggleNoteTab('preview')" style="padding: 0.35rem 0.65rem; font-size: 0.75rem; border-radius: 4px;">
                                             <i class="fa-solid fa-eye"></i> Preview
                                         </button>
+                                        <div style="height: 18px; width: 1px; background: var(--border-color); margin: 0 0.25rem;"></div>
+                                        <select id="notepad-font-family" class="form-control" style="font-size: 0.75rem; height: 28px; width: 110px; padding: 0 0.35rem;" onchange="changeNotepadFont(this.value)">
+                                            <option value="sans">Sans-Serif</option>
+                                            <option value="serif">Serif</option>
+                                            <option value="mono">Monospace</option>
+                                        </select>
+                                        <select id="notepad-font-size" class="form-control" style="font-size: 0.75rem; height: 28px; width: 75px; padding: 0 0.35rem;" onchange="changeNotepadFontSize(this.value)">
+                                            <option value="14px">14px</option>
+                                            <option value="16px" selected>16px</option>
+                                            <option value="18px">18px</option>
+                                            <option value="20px">20px</option>
+                                        </select>
                                     </div>
-                                    <div class="note-editor-actions" style="display: flex; align-items: center; gap: 0.5rem;">
-                                        <span id="note-save-status" style="font-size: 0.7rem; color: var(--text-muted); margin-right: 0.5rem; font-weight: 500;"></span>
-                                        <button class="btn btn-primary" onclick="saveCurrentNote()" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; border-radius: 4px;">
-                                            <i class="fa-solid fa-floppy-disk"></i> Save Note
+
+                                    <div class="note-editor-actions" style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+                                        <span id="note-save-status" style="font-size: 0.7rem; color: var(--text-muted); margin-right: 0.25rem; font-weight: 500;"></span>
+                                        <button class="btn btn-secondary" onclick="openShareModal('note')" style="padding: 0.35rem 0.65rem; font-size: 0.75rem; border-radius: 4px; color: #6366f1; border-color: #c7d2fe; background: #eeeffe;" title="Share Note Link & Social">
+                                            <i class="fa-solid fa-share-nodes"></i> Share
                                         </button>
-                                        <button class="btn btn-danger" onclick="deleteCurrentNote()" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; border-radius: 4px;">
-                                            <i class="fa-solid fa-trash-can"></i> Delete
+
+                                        <!-- Export Dropdown -->
+                                        <div style="position: relative; display: inline-block;">
+                                            <button class="btn btn-secondary" onclick="toggleExportMenu('note-export-dropdown')" style="padding: 0.35rem 0.65rem; font-size: 0.75rem; border-radius: 4px;">
+                                                <i class="fa-solid fa-download"></i> Export <i class="fa-solid fa-chevron-down" style="font-size: 0.65rem; margin-left: 0.25rem;"></i>
+                                            </button>
+                                            <div id="note-export-dropdown" class="export-dropdown-menu" style="display: none; position: absolute; right: 0; top: 110%; background: #ffffff; border: 1px solid var(--border-color); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 100; min-width: 140px; padding: 0.25rem 0;">
+                                                <button onclick="exportCurrentNotePDF()" class="dropdown-item"><i class="fa-solid fa-file-pdf" style="color: #ef4444;"></i> Export PDF</button>
+                                                <button onclick="exportCurrentNoteZIP()" class="dropdown-item"><i class="fa-solid fa-file-zipper" style="color: #eab308;"></i> Export ZIP</button>
+                                                <button onclick="exportCurrentNoteExcel()" class="dropdown-item"><i class="fa-solid fa-file-excel" style="color: #107c41;"></i> Export Excel</button>
+                                                <button onclick="exportCurrentNoteTXT()" class="dropdown-item"><i class="fa-solid fa-file-lines" style="color: #3b82f6;"></i> Export Text (.txt)</button>
+                                            </div>
+                                        </div>
+
+                                        <button class="btn btn-primary" onclick="saveCurrentNote()" style="padding: 0.35rem 0.65rem; font-size: 0.75rem; border-radius: 4px;">
+                                            <i class="fa-solid fa-floppy-disk"></i> Save
+                                        </button>
+                                        <button class="btn btn-danger" onclick="deleteCurrentNote()" style="padding: 0.35rem 0.65rem; font-size: 0.75rem; border-radius: 4px;">
+                                            <i class="fa-solid fa-trash-can"></i>
                                         </button>
                                     </div>
                                 </div>
-                                <div class="note-editor-body" style="flex: 1; display: flex; flex-direction: column; padding: 1.5rem; overflow-y: auto; background: #ffffff; height: calc(100% - 52px);">
-                                    <input type="text" id="note-title-input" class="note-editor-title" placeholder="Untitled Note" style="font-size: 1.5rem; font-weight: 700; border: none; outline: none; margin-bottom: 1.25rem; width: 100%; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; color: #09090b;" oninput="onNoteContentChange()">
+
+                                <!-- Rich Notepad Formatting Toolbar -->
+                                <div id="notepad-toolbar" style="display: flex; align-items: center; gap: 0.2rem; padding: 0.35rem 1rem; background: #f8fafc; border-bottom: 1px solid var(--border-color); overflow-x: auto; flex-wrap: wrap;">
+                                    <button class="notepad-tool-btn" onclick="applyNotepadFormat('bold')" title="Bold (Ctrl+B)"><i class="fa-solid fa-bold"></i></button>
+                                    <button class="notepad-tool-btn" onclick="applyNotepadFormat('italic')" title="Italic (Ctrl+I)"><i class="fa-solid fa-italic"></i></button>
+                                    <button class="notepad-tool-btn" onclick="applyNotepadFormat('underline')" title="Underline"><i class="fa-solid fa-underline"></i></button>
+                                    <button class="notepad-tool-btn" onclick="applyNotepadFormat('strikethrough')" title="Strikethrough"><i class="fa-solid fa-strikethrough"></i></button>
+                                    <div class="toolbar-divider"></div>
+                                    <button class="notepad-tool-btn" onclick="applyNotepadFormat('h1')" title="Heading 1">H1</button>
+                                    <button class="notepad-tool-btn" onclick="applyNotepadFormat('h2')" title="Heading 2">H2</button>
+                                    <button class="notepad-tool-btn" onclick="applyNotepadFormat('h3')" title="Heading 3">H3</button>
+                                    <div class="toolbar-divider"></div>
+                                    <button class="notepad-tool-btn" onclick="applyNotepadFormat('ul')" title="Bullet List"><i class="fa-solid fa-list-ul"></i></button>
+                                    <button class="notepad-tool-btn" onclick="applyNotepadFormat('ol')" title="Numbered List"><i class="fa-solid fa-list-ol"></i></button>
+                                    <button class="notepad-tool-btn" onclick="applyNotepadFormat('checklist')" title="Task Checklist"><i class="fa-regular fa-square-check"></i></button>
+                                    <div class="toolbar-divider"></div>
+                                    <button class="notepad-tool-btn" onclick="applyNotepadFormat('code')" title="Inline Code"><i class="fa-solid fa-code"></i></button>
+                                    <button class="notepad-tool-btn" onclick="applyNotepadFormat('codeblock')" title="Code Block"><i class="fa-solid fa-laptop-code"></i></button>
+                                    <button class="notepad-tool-btn" onclick="applyNotepadFormat('quote')" title="Quote Block"><i class="fa-solid fa-quote-left"></i></button>
+                                    <button class="notepad-tool-btn" onclick="applyNotepadFormat('timestamp')" title="Insert Timestamp"><i class="fa-regular fa-clock"></i></button>
+                                    <div class="toolbar-divider"></div>
+                                    <button class="notepad-tool-btn" onclick="toggleFocusWritingMode()" title="Toggle Focus Writing Mode"><i class="fa-solid fa-expand"></i> Focus Mode</button>
+                                </div>
+
+                                <div class="note-editor-body" style="flex: 1; display: flex; flex-direction: column; padding: 1.25rem; overflow-y: auto; background: #ffffff;">
+                                    <input type="text" id="note-title-input" class="note-editor-title" placeholder="Untitled Notepad Note" style="font-size: 1.5rem; font-weight: 700; border: none; outline: none; margin-bottom: 1rem; width: 100%; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; color: #09090b;" oninput="onNoteContentChange()">
                                     
                                     <div id="note-edit-pane" style="flex: 1; display: flex; flex-direction: column;">
-                                        <textarea id="note-content-input" class="note-editor-textarea" placeholder="Start writing notes here... (Supports markdown structure like lists, headers, code, etc.)" style="flex: 1; border: none; outline: none; resize: none; font-size: 0.95rem; line-height: 1.6; width: 100%; min-height: 320px; font-family: var(--font-ui); color: #09090b;" oninput="onNoteContentChange()"></textarea>
+                                        <textarea id="note-content-input" class="note-editor-textarea" placeholder="Type your notepad notes here..." style="flex: 1; border: none; outline: none; resize: none; font-size: 1rem; line-height: 1.6; width: 100%; min-height: 320px; font-family: var(--font-ui); color: #09090b;" oninput="onNoteContentChange()"></textarea>
                                     </div>
                                     
                                     <div id="note-preview-pane" style="display: none; flex: 1; font-size: 0.95rem; line-height: 1.6; color: var(--text-primary); outline: none; overflow-y: auto;" class="markdown-body">
                                         <!-- Markdown preview rendered here -->
                                     </div>
+                                </div>
+
+                                <!-- Notepad Live Stats Status Bar -->
+                                <div id="notepad-status-bar" style="display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 1rem; background: #f8fafc; border-top: 1px solid var(--border-color); font-size: 0.72rem; color: var(--text-secondary);">
+                                    <div style="display: flex; gap: 1rem;">
+                                        <span><strong id="notepad-stat-words">0</strong> Words</span>
+                                        <span><strong id="notepad-stat-chars">0</strong> Characters</span>
+                                        <span><strong id="notepad-stat-paras">0</strong> Paragraphs</span>
+                                        <span>~<strong id="notepad-stat-readtime">0</strong> min read</span>
+                                    </div>
+                                    <div id="notepad-status-time" style="font-weight: 500; color: var(--text-muted);">Notepad Ready</div>
                                 </div>
                             </div>
                         </main>
@@ -350,6 +430,78 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Interactive Excel Sheet Editor View Container -->
+                <div id="sheets-view" style="display: none;">
+                    <div class="excel-header-bar" style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 6px 6px 0 0; padding: 0.75rem 1.25rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;">
+                        <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+                            <i class="fa-solid fa-file-excel" style="font-size: 1.5rem; color: #107c41;"></i>
+                            <input type="text" id="excel-sheet-title" class="form-control" value="Untitled Spreadsheet" style="font-size: 1rem; font-weight: 700; border: 1px solid transparent; width: 220px;" onfocus="this.style.borderColor='var(--border-color)'" onblur="this.style.borderColor='transparent'">
+                            <div style="display: flex; align-items: center; gap: 0.35rem;">
+                                <label style="font-size: 0.75rem; color: var(--text-secondary);">Template:</label>
+                                <select id="excel-template-select" class="form-control" style="font-size: 0.75rem; height: 28px; width: 140px; padding: 0 0.35rem;" onchange="loadExcelTemplate(this.value)">
+                                    <option value="blank">Blank Grid</option>
+                                    <option value="snippets">Snippets Log</option>
+                                    <option value="notes">Notes Registry</option>
+                                    <option value="budget">Monthly Budget</option>
+                                    <option value="tasks">Project Tasks</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                            <input type="file" id="excel-file-input" accept=".xlsx,.xls,.csv" style="display:none;" onchange="importExcelFileToGrid(event)">
+                            <button class="btn btn-secondary" onclick="document.getElementById('excel-file-input').click()" style="font-size: 0.75rem; padding: 0.35rem 0.65rem;">
+                                <i class="fa-solid fa-file-import" style="color: #3b82f6;"></i> Import Excel / CSV
+                            </button>
+                            <button class="btn btn-secondary" onclick="exportGridToExcel()" style="font-size: 0.75rem; padding: 0.35rem 0.65rem;">
+                                <i class="fa-solid fa-file-excel" style="color: #107c41;"></i> Export (.xlsx)
+                            </button>
+                            <button class="btn btn-secondary" onclick="exportGridToCSV()" style="font-size: 0.75rem; padding: 0.35rem 0.65rem;">
+                                <i class="fa-solid fa-file-csv" style="color: #0284c7;"></i> Export (.csv)
+                            </button>
+                            <button class="btn btn-secondary" onclick="openShareModal('sheet')" style="font-size: 0.75rem; padding: 0.35rem 0.65rem; color: #6366f1; border-color: #c7d2fe; background: #eeeffe;">
+                                <i class="fa-solid fa-share-nodes"></i> Share
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Excel Formatting Toolbar & Formula Bar -->
+                    <div style="background: #f8fafc; border: 1px solid var(--border-color); border-top: none; padding: 0.5rem 1rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                        <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+                            <button class="notepad-tool-btn" onclick="addExcelRow()" title="Add Row"><i class="fa-solid fa-plus"></i> Row</button>
+                            <button class="notepad-tool-btn" onclick="deleteExcelRow()" title="Delete Last Row"><i class="fa-solid fa-minus"></i> Row</button>
+                            <button class="notepad-tool-btn" onclick="addExcelCol()" title="Add Column"><i class="fa-solid fa-plus"></i> Col</button>
+                            <button class="notepad-tool-btn" onclick="deleteExcelCol()" title="Delete Last Column"><i class="fa-solid fa-minus"></i> Col</button>
+                            <div class="toolbar-divider"></div>
+                            <button class="notepad-tool-btn" onclick="formatExcelCell('bold')" title="Bold"><i class="fa-solid fa-bold"></i></button>
+                            <button class="notepad-tool-btn" onclick="formatExcelCell('italic')" title="Italic"><i class="fa-solid fa-italic"></i></button>
+                            <button class="notepad-tool-btn" onclick="formatExcelCell('align-left')" title="Align Left"><i class="fa-solid fa-align-left"></i></button>
+                            <button class="notepad-tool-btn" onclick="formatExcelCell('align-center')" title="Align Center"><i class="fa-solid fa-align-center"></i></button>
+                            <button class="notepad-tool-btn" onclick="formatExcelCell('align-right')" title="Align Right"><i class="fa-solid fa-align-right"></i></button>
+                            <div class="toolbar-divider"></div>
+                            <label style="font-size: 0.7rem; color: var(--text-secondary);">Fill:</label>
+                            <input type="color" id="excel-bg-color" value="#ffffff" style="width: 26px; height: 24px; border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer;" onchange="formatExcelCell('bg', this.value)">
+                            <label style="font-size: 0.7rem; color: var(--text-secondary); margin-left: 0.25rem;">Text:</label>
+                            <input type="color" id="excel-text-color" value="#09090b" style="width: 26px; height: 24px; border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer;" onchange="formatExcelCell('color', this.value)">
+                            <div class="toolbar-divider"></div>
+                            <button class="notepad-tool-btn" onclick="clearExcelGrid()" title="Clear Grid"><i class="fa-solid fa-trash-can"></i> Clear</button>
+                        </div>
+
+                        <!-- Formula Input Bar -->
+                        <div style="display: flex; align-items: center; gap: 0.5rem; background: #ffffff; border: 1px solid var(--border-color); border-radius: 4px; padding: 0.2rem 0.5rem;">
+                            <div id="excel-cell-ref" style="font-size: 0.75rem; font-weight: 700; color: #107c41; width: 45px; text-align: center; border-right: 1px solid var(--border-color); padding-right: 0.35rem;">A1</div>
+                            <span style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); font-style: italic;">fx</span>
+                            <input type="text" id="excel-formula-bar" placeholder="Enter text or formula (e.g. =SUM(A1:A10), =AVERAGE(B1:B5), =A1+B1)" style="flex: 1; border: none; outline: none; font-size: 0.8rem; font-family: var(--font-code);" oninput="onFormulaBarInput(this.value)">
+                        </div>
+                    </div>
+
+                    <!-- Excel Data Grid Spreadsheet -->
+                    <div id="excel-grid-wrapper" style="background: #ffffff; border: 1px solid var(--border-color); border-top: none; border-radius: 0 0 6px 6px; overflow: auto; max-height: calc(100vh - 270px); position: relative;">
+                        <table id="excel-grid-table" style="border-collapse: collapse; width: 100%; font-size: 0.8rem; user-select: none;">
+                            <!-- Dynamically rendered spreadsheet grid -->
+                        </table>
                     </div>
                 </div>
             </div>
@@ -590,6 +742,47 @@
                 <div id="ai-content-duplicate" class="ai-tab-content" style="display: none;">
                     <div id="ai-duplicate-alert" style="padding: 1rem; border-radius: 6px;">
                     </div>
+                </div>
+    <div class="modal-backdrop" id="share-modal" style="display: none;">
+        <div class="run-card" style="max-width: 480px;">
+            <div class="run-card-header">
+                <h3 style="display: flex; align-items: center; gap: 0.5rem; color: #6366f1;">
+                    <i class="fa-solid fa-share-nodes"></i> Share Content
+                </h3>
+                <button class="toast-close" onclick="closeShareModal()">&times;</button>
+            </div>
+            <div class="run-card-body" style="display: flex; flex-direction: column; gap: 1.25rem;">
+                <div>
+                    <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.35rem; display: block;">Public Shareable Link</label>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <input type="text" id="share-modal-url" class="form-control" readonly style="font-size: 0.78rem; background: #f8fafc;">
+                        <button class="btn btn-primary" onclick="copyShareModalLink()" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; white-space: nowrap;">
+                            <i class="fa-regular fa-copy"></i> Copy Link
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label style="font-size: 0.75rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.5rem; display: block;">Share via Social Platforms</label>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem;">
+                        <button class="btn btn-secondary" onclick="shareToWhatsApp()" style="display: flex; align-items: center; gap: 0.5rem; justify-content: center; font-size: 0.8rem; border-color: #25D366; color: #128C7E;">
+                            <i class="fa-brands fa-whatsapp" style="font-size: 1.1rem; color: #25D366;"></i> WhatsApp
+                        </button>
+                        <button class="btn btn-secondary" onclick="shareToTwitter()" style="display: flex; align-items: center; gap: 0.5rem; justify-content: center; font-size: 0.8rem; border-color: #1DA1F2; color: #1DA1F2;">
+                            <i class="fa-brands fa-x-twitter" style="font-size: 1.1rem;"></i> Twitter / X
+                        </button>
+                        <button class="btn btn-secondary" onclick="shareToEmail()" style="display: flex; align-items: center; gap: 0.5rem; justify-content: center; font-size: 0.8rem; border-color: #ea4335; color: #ea4335;">
+                            <i class="fa-regular fa-envelope" style="font-size: 1.1rem;"></i> Email
+                        </button>
+                        <button class="btn btn-secondary" onclick="triggerWebShare()" style="display: flex; align-items: center; gap: 0.5rem; justify-content: center; font-size: 0.8rem; border-color: #6366f1; color: #6366f1;">
+                            <i class="fa-solid fa-mobile-screen-button" style="font-size: 1.1rem;"></i> Device Share
+                        </button>
+                    </div>
+                </div>
+
+                <div style="border-top: 1px solid var(--border-color); padding-top: 1rem; display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 0.72rem; color: var(--text-muted);">Anyone with link can view.</span>
+                    <button class="btn btn-secondary" onclick="closeShareModal()" style="font-size: 0.75rem;">Close</button>
                 </div>
             </div>
         </div>

@@ -84,3 +84,8 @@ def read_create():
 @app.get("/edit")
 def read_edit():
     return FileResponse(os.path.join(FRONTEND_DIR, "edit.html"))
+
+@app.get("/share")
+def read_share():
+    return FileResponse(os.path.join(FRONTEND_DIR, "share.html"))
+

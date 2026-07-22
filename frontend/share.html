@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shared Content - ScriptVault</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
+    <link rel="stylesheet" href="css/style.css?v=6">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        body {
+            background-color: var(--bg-body, #09090b);
+            color: var(--text-primary, #f4f4f5);
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .share-header {
+            background: rgba(18, 18, 23, 0.85);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-color, #27272a);
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .share-brand {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #ffffff;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .share-container {
+            max-width: 900px;
+            width: 90%;
+            margin: 2.5rem auto;
+            flex: 1;
+        }
+        .share-card {
+            background: #121217;
+            border: 1px solid #27272a;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .share-card-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            border-bottom: 1px solid #27272a;
+            padding-bottom: 1.25rem;
+            margin-bottom: 1.5rem;
+            gap: 1rem;
+        }
+        .share-title {
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: #ffffff;
+            margin: 0 0 0.5rem 0;
+        }
+        .share-meta {
+            font-size: 0.85rem;
+            color: #a1a1aa;
+            display: flex;
+            align-items: center;
+            gap: 1.25rem;
+        }
+        .share-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            flex-wrap: wrap;
+        }
+        .share-btn {
+            background: #1e1e24;
+            color: #e4e4e7;
+            border: 1px solid #3f3f46;
+            padding: 0.45rem 0.9rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            transition: all 0.2s ease;
+        }
+        .share-btn:hover {
+            background: #27272a;
+            color: #ffffff;
+            border-color: #52525b;
+        }
+        .share-btn-primary {
+            background: #6366f1;
+            border-color: #4f46e5;
+            color: white;
+        }
+        .share-btn-primary:hover {
+            background: #4f46e5;
+        }
+        .share-content-box {
+            background: #18181b;
+            border: 1px solid #27272a;
+            border-radius: 8px;
+            padding: 1.5rem;
+            line-height: 1.6;
+            font-size: 0.95rem;
+            color: #e4e4e7;
+            min-height: 250px;
+            white-space: pre-wrap;
+            overflow-x: auto;
+        }
+        .markdown-preview h1, .markdown-preview h2, .markdown-preview h3 {
+            color: #ffffff;
+            border-bottom: 1px solid #27272a;
+            padding-bottom: 0.3rem;
+        }
+        .markdown-preview code {
+            background: #27272a;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.88rem;
+        }
+        .markdown-preview pre {
+            background: #09090b;
+            padding: 1rem;
+            border-radius: 6px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <header class="share-header">
+        <a href="/" class="share-brand">
+            <i class="fa-solid fa-vault" style="color: #6366f1;"></i> SCRIPTVAULT
+        </a>
+        <div>
+            <a href="/login" class="share-btn">Log In</a>
+            <a href="/register" class="share-btn share-btn-primary">Sign Up Free</a>
+        </div>
+    </header>
+
+    <div class="share-container">
+        <div class="share-card" id="share-card-container">
+            <div id="share-loading" style="text-align: center; padding: 4rem 1rem;">
+                <i class="fa-solid fa-circle-notch fa-spin" style="font-size: 2.5rem; color: #6366f1;"></i>
+                <p style="margin-top: 1rem; color: #a1a1aa;">Loading shared content...</p>
+            </div>
+
+            <div id="share-content-wrapper" style="display: none;">
+                <div class="share-card-header">
+                    <div>
+                        <h1 class="share-title" id="share-title">Shared Content</h1>
+                        <div class="share-meta">
+                            <span><i class="fa-solid fa-user"></i> Shared by <strong id="share-author">Author</strong></span>
+                            <span><i class="fa-regular fa-clock"></i> <span id="share-date">Date</span></span>
+                            <span id="share-type-badge" style="background: #312e81; color: #c7d2fe; padding: 0.15rem 0.6rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">Note</span>
+                        </div>
+                    </div>
+                    <div class="share-actions">
+                        <button class="share-btn" onclick="copyShareText()">
+                            <i class="fa-regular fa-copy"></i> Copy
+                        </button>
+                        <button class="share-btn" onclick="downloadSharePDF()">
+                            <i class="fa-solid fa-file-pdf" style="color: #ef4444;"></i> PDF
+                        </button>
+                        <button class="share-btn" onclick="downloadShareZIP()">
+                            <i class="fa-solid fa-file-zipper" style="color: #eab308;"></i> ZIP
+                        </button>
+                        <button class="share-btn" onclick="downloadShareTXT()">
+                            <i class="fa-solid fa-file-lines" style="color: #3b82f6;"></i> TXT
+                        </button>
+                    </div>
+                </div>
+
+                <div id="share-content-body" class="share-content-box">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer style="text-align: center; padding: 2rem 0; color: #71717a; font-size: 0.8rem; border-top: 1px solid #27272a; margin-top: auto;">
+        Powered by ScriptVault &copy; 2026. All rights reserved.
+    </footer>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script>
+        let loadedContent = null;
+        let contentType = 'note';
+
+        async function initSharePage() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const id = urlParams.get('id');
+            const type = urlParams.get('type') || 'note';
+            contentType = type;
+
+            if (!id) {
+                showError("Invalid share URL. Content ID missing.");
+                return;
+            }
+
+            try {
+                const endpoint = type === 'snippet' ? `/public/snippet/${id}` : `/public/note/${id}`;
+                const res = await fetch(endpoint);
+                if (!res.ok) {
+                    throw new Error("Content not found or private.");
+                }
+                const data = await res.json();
+                loadedContent = data;
+
+                document.getElementById("share-loading").style.display = "none";
+                document.getElementById("share-content-wrapper").style.display = "block";
+
+                document.getElementById("share-title").textContent = data.title || "Untitled";
+                document.getElementById("share-author").textContent = data.author || "ScriptVault User";
+                document.getElementById("share-date").textContent = new Date(data.created_at).toLocaleDateString();
+
+                const badge = document.getElementById("share-type-badge");
+                if (type === 'snippet') {
+                    badge.textContent = `Snippet (${data.language || 'Code'})`;
+                    badge.style.background = "#064e3b";
+                    badge.style.color = "#a7f3d0";
+                    
+                    const codeBox = document.createElement("pre");
+                    const codeEl = document.createElement("code");
+                    codeEl.className = `language-${(data.language || 'javascript').toLowerCase()}`;
+                    codeEl.textContent = data.code || "";
+                    codeBox.appendChild(codeEl);
+                    
+                    const body = document.getElementById("share-content-body");
+                    body.innerHTML = "";
+                    body.appendChild(codeBox);
+                    if (window.Prism) Prism.highlightElement(codeEl);
+                } else {
+                    badge.textContent = "Notepad Note";
+                    const body = document.getElementById("share-content-body");
+                    body.className = "share-content-box markdown-preview";
+                    if (window.marked) {
+                        body.innerHTML = marked.parse(data.content || "");
+                    } else {
+                        body.textContent = data.content || "";
+                    }
+                }
+            } catch (err) {
+                showError(err.message || "Failed to load shared content.");
+            }
+        }
+
+        function showError(msg) {
+            document.getElementById("share-loading").innerHTML = `
+                <i class="fa-solid fa-triangle-exclamation" style="font-size: 2.5rem; color: #ef4444;"></i>
+                <h3 style="margin-top: 1rem; color: #ffffff;">Unable to Load Share Content</h3>
+                <p style="color: #a1a1aa; max-width: 400px; margin: 0.5rem auto 1.5rem;">${msg}</p>
+                <a href="/" class="share-btn share-btn-primary">Go to ScriptVault</a>
+            `;
+        }
+
+        function copyShareText() {
+            if (!loadedContent) return;
+            const text = contentType === 'snippet' ? loadedContent.code : loadedContent.content;
+            navigator.clipboard.writeText(text || "").then(() => {
+                alert("Content copied to clipboard!");
+            });
+        }
+
+        function downloadShareTXT() {
+            if (!loadedContent) return;
+            const title = (loadedContent.title || "shared_file").replace(/[^a-zA-Z0-9_-]/g, "_");
+            const text = contentType === 'snippet' ? loadedContent.code : loadedContent.content;
+            const blob = new Blob([text || ""], { type: "text/plain;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${title}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function downloadSharePDF() {
+            if (!loadedContent) return;
+            const el = document.getElementById("share-content-body");
+            const title = (loadedContent.title || "shared_file").replace(/[^a-zA-Z0-9_-]/g, "_");
+            if (window.html2pdf) {
+                const opt = {
+                    margin:       10,
+                    filename:     `${title}.pdf`,
+                    image:        { type: 'jpeg', quality: 0.98 },
+                    html2canvas:  { scale: 2 },
+                    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                };
+                html2pdf().set(opt).from(el).save();
+            } else {
+                alert("PDF generator loading...");
+            }
+        }
+
+        function downloadShareZIP() {
+            if (!loadedContent || !window.JSZip) {
+                alert("ZIP generator not ready.");
+                return;
+            }
+            const title = (loadedContent.title || "shared_file").replace(/[^a-zA-Z0-9_-]/g, "_");
+            const text = contentType === 'snippet' ? loadedContent.code : loadedContent.content;
+            const zip = new JSZip();
+            zip.file(`${title}.txt`, text || "");
+            zip.file("README.txt", `Downloaded from ScriptVault Share\nTitle: ${loadedContent.title}\nAuthor: ${loadedContent.author}\nDate: ${loadedContent.created_at}`);
+            
+            zip.generateAsync({ type: "blob" }).then(function(content) {
+                const url = URL.createObjectURL(content);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `${title}.zip`;
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+        }
+
+        document.addEventListener("DOMContentLoaded", initSharePage);
+    </script>
+</body>
+</html>

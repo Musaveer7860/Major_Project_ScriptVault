@@ -32,21 +32,26 @@ function switchView(viewName) {
     const viewSnippets = document.getElementById("snippets-view");
     const viewNotes = document.getElementById("notes-view");
     const viewPlayground = document.getElementById("playground-view");
+    const viewSheets = document.getElementById("sheets-view");
     
-    viewSnippets.style.display = "none";
-    viewNotes.style.display = "none";
-    viewPlayground.style.display = "none";
+    if (viewSnippets) viewSnippets.style.display = "none";
+    if (viewNotes) viewNotes.style.display = "none";
+    if (viewPlayground) viewPlayground.style.display = "none";
+    if (viewSheets) viewSheets.style.display = "none";
     
     if (viewName === "snippets") {
-        viewSnippets.style.display = "block";
+        if (viewSnippets) viewSnippets.style.display = "block";
         fetchSnippets();
     } else if (viewName === "notes") {
-        viewNotes.style.display = "block";
+        if (viewNotes) viewNotes.style.display = "block";
         fetchNotes();
         selectNote(null);
     } else if (viewName === "playground") {
-        viewPlayground.style.display = "block";
+        if (viewPlayground) viewPlayground.style.display = "block";
         initPlayground();
+    } else if (viewName === "sheets") {
+        if (viewSheets) viewSheets.style.display = "block";
+        initExcelGrid();
     }
 }
 
@@ -2477,4 +2482,682 @@ async function runPlaygroundCode() {
         outputConsole.textContent = `Execution Error: ${err.message}`;
         outputConsole.style.color = "#fca5a5";
     }
+}
+
+// ====================================================
+// INTERACTIVE EXCEL SPREADSHEET GRID ENGINE
+// ====================================================
+let excelRows = 20;
+let excelCols = 10;
+let excelGridData = {};
+let activeCellRef = "A1";
+
+function colIndexToLetter(idx) {
+    let temp, letter = '';
+    while (idx >= 0) {
+        temp = idx % 26;
+        letter = String.fromCharCode(temp + 65) + letter;
+        idx = (idx - temp) / 26 - 1;
+    }
+    return letter;
+}
+
+function letterToColIndex(letter) {
+    let col = 0;
+    for (let i = 0; i < letter.length; i++) {
+        col = col * 26 + (letter.charCodeAt(i) - 64);
+    }
+    return col - 1;
+}
+
+function initExcelGrid() {
+    const table = document.getElementById("excel-grid-table");
+    if (!table) return;
+
+    if (Object.keys(excelGridData).length === 0) {
+        loadExcelTemplate("blank");
+    } else {
+        renderExcelGrid();
+    }
+}
+
+function renderExcelGrid() {
+    const table = document.getElementById("excel-grid-table");
+    if (!table) return;
+
+    let html = "<thead><tr><th class='row-header'>#</th>";
+    for (let c = 0; c < excelCols; c++) {
+        html += `<th>${colIndexToLetter(c)}</th>`;
+    }
+    html += "</tr></thead><tbody>";
+
+    for (let r = 1; r <= excelRows; r++) {
+        html += `<tr><th class='row-header'>${r}</th>`;
+        for (let c = 0; c < excelCols; c++) {
+            const colLetter = colIndexToLetter(c);
+            const ref = `${colLetter}${r}`;
+            const cell = excelGridData[ref] || { raw: "", val: "" };
+            
+            let displayVal = cell.val !== undefined ? cell.val : cell.raw;
+            if (cell.raw && String(cell.raw).startsWith("=")) {
+                displayVal = evaluateExcelFormula(cell.raw);
+                excelGridData[ref].val = displayVal;
+            }
+
+            let styleStr = "";
+            if (cell.bold) styleStr += "font-weight: bold; ";
+            if (cell.italic) styleStr += "font-style: italic; ";
+            if (cell.align) styleStr += `text-align: ${cell.align}; `;
+            if (cell.bg) styleStr += `background-color: ${cell.bg}; `;
+            if (cell.color) styleStr += `color: ${cell.color}; `;
+
+            const activeClass = ref === activeCellRef ? "active-cell" : "";
+
+            html += `<td class="${activeClass}" style="${styleStr}">
+                <input type="text" data-ref="${ref}" value="${escapeHtmlAttr(displayVal)}" 
+                    onfocus="onExcelCellFocus('${ref}')" 
+                    oninput="onExcelCellInput('${ref}', this.value)" 
+                    onblur="renderExcelGrid()">
+            </td>`;
+        }
+        html += "</tr>";
+    }
+    html += "</tbody>";
+    table.innerHTML = html;
+
+    const cellRefEl = document.getElementById("excel-cell-ref");
+    if (cellRefEl) cellRefEl.textContent = activeCellRef;
+
+    const formulaBar = document.getElementById("excel-formula-bar");
+    if (formulaBar && excelGridData[activeCellRef]) {
+        formulaBar.value = excelGridData[activeCellRef].raw || "";
+    }
+}
+
+function escapeHtmlAttr(str) {
+    if (str === undefined || str === null) return "";
+    return String(str).replace(/"/g, '&quot;');
+}
+
+function onExcelCellFocus(ref) {
+    activeCellRef = ref;
+    const cellRefEl = document.getElementById("excel-cell-ref");
+    if (cellRefEl) cellRefEl.textContent = ref;
+
+    const cell = excelGridData[ref] || { raw: "" };
+    const formulaBar = document.getElementById("excel-formula-bar");
+    if (formulaBar) formulaBar.value = cell.raw || "";
+}
+
+function onExcelCellInput(ref, value) {
+    if (!excelGridData[ref]) excelGridData[ref] = {};
+    excelGridData[ref].raw = value;
+    if (String(value).startsWith("=")) {
+        excelGridData[ref].val = evaluateExcelFormula(value);
+    } else {
+        excelGridData[ref].val = value;
+    }
+}
+
+function onFormulaBarInput(value) {
+    if (!activeCellRef) return;
+    onExcelCellInput(activeCellRef, value);
+    const cellInput = document.querySelector(`input[data-ref="${activeCellRef}"]`);
+    if (cellInput) {
+        cellInput.value = String(value).startsWith("=") ? evaluateExcelFormula(value) : value;
+    }
+}
+
+function evaluateExcelFormula(formula) {
+    try {
+        let clean = String(formula).substring(1).toUpperCase().trim();
+
+        const sumMatch = clean.match(/^SUM\(([A-Z]+\d+):([A-Z]+\d+)\)$/);
+        if (sumMatch) {
+            const values = getCellRangeValues(sumMatch[1], sumMatch[2]);
+            return values.reduce((acc, num) => acc + (parseFloat(num) || 0), 0);
+        }
+
+        const avgMatch = clean.match(/^AVERAGE\(([A-Z]+\d+):([A-Z]+\d+)\)$/);
+        if (avgMatch) {
+            const values = getCellRangeValues(avgMatch[1], avgMatch[2]).map(v => parseFloat(v) || 0);
+            if (values.length === 0) return 0;
+            return (values.reduce((acc, n) => acc + n, 0) / values.length).toFixed(2);
+        }
+
+        const countMatch = clean.match(/^COUNT\(([A-Z]+\d+):([A-Z]+\d+)\)$/);
+        if (countMatch) {
+            const values = getCellRangeValues(countMatch[1], countMatch[2]);
+            return values.filter(v => v !== "" && !isNaN(v)).length;
+        }
+
+        clean = clean.replace(/([A-Z]+\d+)/g, (match) => {
+            const cell = excelGridData[match];
+            const v = cell ? (cell.val !== undefined ? cell.val : cell.raw) : 0;
+            return isNaN(v) ? 0 : v;
+        });
+
+        const evalResult = Function(`"use strict"; return (${clean})`)();
+        return isNaN(evalResult) ? "#VALUE!" : evalResult;
+    } catch (e) {
+        return "#ERROR!";
+    }
+}
+
+function getCellRangeValues(startRef, endRef) {
+    const startCol = letterToColIndex(startRef.replace(/\d+/g, ''));
+    const startRow = parseInt(startRef.replace(/\D+/g, ''));
+    const endCol = letterToColIndex(endRef.replace(/\d+/g, ''));
+    const endRow = parseInt(endRef.replace(/\D+/g, ''));
+
+    const minCol = Math.min(startCol, endCol);
+    const maxCol = Math.max(startCol, endCol);
+    const minRow = Math.min(startRow, endRow);
+    const maxRow = Math.max(startRow, endRow);
+
+    const values = [];
+    for (let r = minRow; r <= maxRow; r++) {
+        for (let c = minCol; c <= maxCol; c++) {
+            const ref = `${colIndexToLetter(c)}${r}`;
+            const cell = excelGridData[ref];
+            if (cell) {
+                values.push(cell.val !== undefined ? cell.val : cell.raw);
+            }
+        }
+    }
+    return values;
+}
+
+function addExcelRow() {
+    excelRows++;
+    renderExcelGrid();
+}
+
+function deleteExcelRow() {
+    if (excelRows > 1) {
+        excelRows--;
+        renderExcelGrid();
+    }
+}
+
+function addExcelCol() {
+    excelCols++;
+    renderExcelGrid();
+}
+
+function deleteExcelCol() {
+    if (excelCols > 1) {
+        excelCols--;
+        renderExcelGrid();
+    }
+}
+
+function formatExcelCell(type, val) {
+    if (!activeCellRef) return;
+    if (!excelGridData[activeCellRef]) excelGridData[activeCellRef] = { raw: "", val: "" };
+    
+    if (type === "bold") excelGridData[activeCellRef].bold = !excelGridData[activeCellRef].bold;
+    if (type === "italic") excelGridData[activeCellRef].italic = !excelGridData[activeCellRef].italic;
+    if (type.startsWith("align-")) excelGridData[activeCellRef].align = type.replace("align-", "");
+    if (type === "bg") excelGridData[activeCellRef].bg = val;
+    if (type === "color") excelGridData[activeCellRef].color = val;
+
+    renderExcelGrid();
+}
+
+function clearExcelGrid() {
+    if (confirm("Are you sure you want to clear all cells in this spreadsheet?")) {
+        excelGridData = {};
+        renderExcelGrid();
+        showToast("Excel spreadsheet cleared.", "info");
+    }
+}
+
+function loadExcelTemplate(templateKey) {
+    excelGridData = {};
+    if (templateKey === "snippets") {
+        excelGridData = {
+            "A1": { raw: "Title", bold: true, bg: "#e2e8f0" },
+            "B1": { raw: "Language", bold: true, bg: "#e2e8f0" },
+            "C1": { raw: "Tags", bold: true, bg: "#e2e8f0" },
+            "D1": { raw: "Description", bold: true, bg: "#e2e8f0" },
+            "A2": { raw: "Fetch Wrapper" }, "B2": { raw: "JavaScript" }, "C2": { raw: "api, fetch" }, "D2": { raw: "Async HTTP GET helper" },
+            "A3": { raw: "Quick Sort" }, "B3": { raw: "Python" }, "C3": { raw: "algo, sorting" }, "D3": { raw: "Divide & Conquer O(n log n)" },
+            "A4": { raw: "Database Connection" }, "B4": { raw: "Java" }, "C4": { raw: "sql, jdbc" }, "D4": { raw: "JDBC Driver setup" }
+        };
+    } else if (templateKey === "budget") {
+        excelGridData = {
+            "A1": { raw: "Expense Item", bold: true, bg: "#fef3c7" },
+            "B1": { raw: "Category", bold: true, bg: "#fef3c7" },
+            "C1": { raw: "Amount ($)", bold: true, bg: "#fef3c7" },
+            "A2": { raw: "Cloud Hosting" }, "B2": { raw: "Infrastructure" }, "C2": { raw: "45" },
+            "A3": { raw: "Domain Renewal" }, "B3": { raw: "Domain" }, "C3": { raw: "15" },
+            "A4": { raw: "API Credits" }, "B4": { raw: "AI Tooling" }, "C4": { raw: "30" },
+            "A5": { raw: "TOTAL", bold: true, bg: "#fee2e2" },
+            "C5": { raw: "=SUM(C2:C4)", bold: true, bg: "#fee2e2" }
+        };
+    } else if (templateKey === "tasks") {
+        excelGridData = {
+            "A1": { raw: "Task Name", bold: true, bg: "#eff6ff" },
+            "B1": { raw: "Assignee", bold: true, bg: "#eff6ff" },
+            "C1": { raw: "Status", bold: true, bg: "#eff6ff" },
+            "D1": { raw: "Priority", bold: true, bg: "#eff6ff" },
+            "A2": { raw: "Excel Integration" }, "B2": { raw: "Dev Team" }, "C2": { raw: "Done" }, "D2": { raw: "High" },
+            "A3": { raw: "Notepad Suite Upgrade" }, "B3": { raw: "Dev Team" }, "C3": { raw: "Done" }, "D3": { raw: "High" },
+            "A4": { raw: "Share & PDF/ZIP Export" }, "B4": { raw: "Dev Team" }, "C4": { raw: "Completed" }, "D4": { raw: "Medium" }
+        };
+    }
+    renderExcelGrid();
+}
+
+function importExcelFileToGrid(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!window.XLSX) {
+        showToast("Excel reader library loading...", "info");
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+            excelGridData = {};
+
+            excelRows = Math.max(20, jsonData.length);
+            excelCols = Math.max(10, jsonData.reduce((max, row) => Math.max(max, row ? row.length : 0), 0));
+
+            jsonData.forEach((row, rIdx) => {
+                if (row) {
+                    row.forEach((cellVal, cIdx) => {
+                        const colLetter = colIndexToLetter(cIdx);
+                        const ref = `${colLetter}${rIdx + 1}`;
+                        const valStr = String(cellVal !== undefined && cellVal !== null ? cellVal : "");
+                        excelGridData[ref] = {
+                            raw: valStr,
+                            val: valStr,
+                            bold: rIdx === 0
+                        };
+                    });
+                }
+            });
+
+            renderExcelGrid();
+            showToast(`Imported ${jsonData.length} row(s) into Excel Grid!`, "success");
+        } catch (err) {
+            showToast(`Could not read Excel file: ${err.message}`, "error");
+        }
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+function exportGridToExcel() {
+    if (!window.XLSX) {
+        showToast("SheetJS library not loaded.", "error");
+        return;
+    }
+
+    const titleInput = document.getElementById("excel-sheet-title");
+    const title = ((titleInput ? titleInput.value : "") || "scriptvault_spreadsheet").replace(/[^a-zA-Z0-9_-]/g, "_");
+    
+    const data = [];
+    for (let r = 1; r <= excelRows; r++) {
+        const row = [];
+        let hasData = false;
+        for (let c = 0; c < excelCols; c++) {
+            const ref = `${colIndexToLetter(c)}${r}`;
+            const cell = excelGridData[ref];
+            const val = cell ? (cell.val !== undefined ? cell.val : cell.raw) : "";
+            if (val !== "") hasData = true;
+            row.push(val);
+        }
+        if (hasData || r <= 10) data.push(row);
+    }
+
+    const worksheet = XLSX.utils.aoa_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
+
+    XLSX.writeFile(workbook, `${title}.xlsx`);
+    showToast("Excel spreadsheet downloaded successfully!", "success");
+}
+
+function exportGridToCSV() {
+    const titleInput = document.getElementById("excel-sheet-title");
+    const title = ((titleInput ? titleInput.value : "") || "scriptvault_spreadsheet").replace(/[^a-zA-Z0-9_-]/g, "_");
+    let csvContent = "";
+    for (let r = 1; r <= excelRows; r++) {
+        const row = [];
+        for (let c = 0; c < excelCols; c++) {
+            const ref = `${colIndexToLetter(c)}${r}`;
+            const cell = excelGridData[ref];
+            const val = cell ? (cell.val !== undefined ? cell.val : cell.raw) : "";
+            row.push(`"${String(val).replace(/"/g, '""')}"`);
+        }
+        csvContent += row.join(",") + "\n";
+    }
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${title}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("CSV exported successfully!", "success");
+}
+
+// ====================================================
+// RICH NOTEPAD TOOLBAR & FORMATTING SUITE
+// ====================================================
+function applyNotepadFormat(type) {
+    const textarea = document.getElementById("note-content-input");
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = textarea.value.substring(start, end);
+
+    let replacement = "";
+    if (type === "bold") replacement = `**${selectedText || "Bold text"}**`;
+    else if (type === "italic") replacement = `*${selectedText || "Italic text"}*`;
+    else if (type === "underline") replacement = `<u>${selectedText || "Underlined text"}</u>`;
+    else if (type === "strikethrough") replacement = `~~${selectedText || "Strikethrough text"}~~`;
+    else if (type === "h1") replacement = `\n# ${selectedText || "Heading 1"}\n`;
+    else if (type === "h2") replacement = `\n## ${selectedText || "Heading 2"}\n`;
+    else if (type === "h3") replacement = `\n### ${selectedText || "Heading 3"}\n`;
+    else if (type === "ul") replacement = `\n- ${selectedText || "List item"}\n`;
+    else if (type === "ol") replacement = `\n1. ${selectedText || "List item"}\n`;
+    else if (type === "checklist") replacement = `\n- [ ] ${selectedText || "Task item"}\n`;
+    else if (type === "code") replacement = `\`${selectedText || "code"}\``;
+    else if (type === "codeblock") replacement = `\n\`\`\`javascript\n${selectedText || "// Code block"}\n\`\`\`\n`;
+    else if (type === "quote") replacement = `\n> ${selectedText || "Quote"}\n`;
+    else if (type === "timestamp") replacement = ` [${new Date().toLocaleString()}] `;
+
+    textarea.setRangeText(replacement, start, end, 'select');
+    textarea.focus();
+    onNoteContentChange();
+}
+
+function changeNotepadFont(fontVal) {
+    const textarea = document.getElementById("note-content-input");
+    const preview = document.getElementById("note-preview-pane");
+    let fontCss = "var(--font-ui)";
+    if (fontVal === "serif") fontCss = "Georgia, serif";
+    if (fontVal === "mono") fontCss = "var(--font-code)";
+
+    if (textarea) textarea.style.fontFamily = fontCss;
+    if (preview) preview.style.fontFamily = fontCss;
+}
+
+function changeNotepadFontSize(sizeVal) {
+    const textarea = document.getElementById("note-content-input");
+    const preview = document.getElementById("note-preview-pane");
+    if (textarea) textarea.style.fontSize = sizeVal;
+    if (preview) preview.style.fontSize = sizeVal;
+}
+
+function updateNotepadStats() {
+    const textarea = document.getElementById("note-content-input");
+    if (!textarea) return;
+    const text = textarea.value || "";
+
+    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+    const chars = text.length;
+    const paras = text.trim() ? text.split(/\n\s*\n/).length : 0;
+    const readTime = Math.ceil(words / 200);
+
+    const elWords = document.getElementById("notepad-stat-words");
+    const elChars = document.getElementById("notepad-stat-chars");
+    const elParas = document.getElementById("notepad-stat-paras");
+    const elRead = document.getElementById("notepad-stat-readtime");
+
+    if (elWords) elWords.textContent = words;
+    if (elChars) elChars.textContent = chars.toLocaleString();
+    if (elParas) elParas.textContent = paras;
+    if (elRead) elRead.textContent = readTime;
+}
+
+function toggleFocusWritingMode() {
+    const pane = document.querySelector(".notes-editor-pane");
+    if (!pane) return;
+    pane.classList.toggle("focus-writing-mode");
+    showToast("Focus mode toggled (Click button again to exit)", "info");
+}
+
+// Wrap onNoteContentChange to update stats
+if (typeof onNoteContentChange === "function") {
+    const origChange = onNoteContentChange;
+    onNoteContentChange = function() {
+        origChange();
+        updateNotepadStats();
+    };
+} else {
+    window.onNoteContentChange = function() {
+        updateNotepadStats();
+    };
+}
+
+// ====================================================
+// MULTI-CHANNEL SHARE SUITE
+// ====================================================
+let currentShareObj = { type: 'note', id: null, title: '', content: '' };
+
+function openShareModal(type = 'note', id = null) {
+    const modal = document.getElementById("share-modal");
+    if (!modal) return;
+
+    let targetId = id;
+    let title = "Shared Item";
+    let contentText = "";
+
+    if (type === 'note') {
+        targetId = activeNoteId;
+        const titleInput = document.getElementById("note-title-input");
+        const contentInput = document.getElementById("note-content-input");
+        title = titleInput ? titleInput.value : "Shared Note";
+        contentText = contentInput ? contentInput.value : "";
+    } else if (type === 'sheet') {
+        const titleInput = document.getElementById("excel-sheet-title");
+        title = titleInput ? titleInput.value : "Shared Spreadsheet";
+        contentText = JSON.stringify(excelGridData);
+    }
+
+    if (!targetId && type === 'note') {
+        showToast("Please save note first before sharing.", "warning");
+        return;
+    }
+
+    currentShareObj = { type, id: targetId, title, content: contentText };
+
+    const shareUrl = `${window.location.origin}/share?type=${type}&id=${targetId || 'active'}`;
+    const urlInput = document.getElementById("share-modal-url");
+    if (urlInput) urlInput.value = shareUrl;
+
+    modal.style.display = "flex";
+}
+
+function closeShareModal() {
+    const modal = document.getElementById("share-modal");
+    if (modal) modal.style.display = "none";
+}
+
+function copyShareModalLink() {
+    const input = document.getElementById("share-modal-url");
+    if (input) {
+        navigator.clipboard.writeText(input.value).then(() => {
+            showToast("Share link copied to clipboard!", "success");
+        });
+    }
+}
+
+function shareToWhatsApp() {
+    const urlInput = document.getElementById("share-modal-url");
+    const url = encodeURIComponent(urlInput ? urlInput.value : window.location.href);
+    const text = encodeURIComponent(`Check out this note on ScriptVault: ${currentShareObj.title}\n`);
+    window.open(`https://api.whatsapp.com/send?text=${text}${url}`, "_blank");
+}
+
+function shareToTwitter() {
+    const urlInput = document.getElementById("share-modal-url");
+    const url = encodeURIComponent(urlInput ? urlInput.value : window.location.href);
+    const text = encodeURIComponent(`Check out "${currentShareObj.title}" on ScriptVault!\n`);
+    window.open(`https://twitter.com/intent/tweet?text=${text}&url=${url}`, "_blank");
+}
+
+function shareToEmail() {
+    const urlInput = document.getElementById("share-modal-url");
+    const url = urlInput ? urlInput.value : window.location.href;
+    const subject = encodeURIComponent(`ScriptVault Share: ${currentShareObj.title}`);
+    const body = encodeURIComponent(`Hi,\n\nI wanted to share this note with you:\n${currentShareObj.title}\n\nView link: ${url}`);
+    window.open(`mailto:?subject=${subject}&body=${body}`, "_self");
+}
+
+function triggerWebShare() {
+    const urlInput = document.getElementById("share-modal-url");
+    const url = urlInput ? urlInput.value : window.location.href;
+    if (navigator.share) {
+        navigator.share({
+            title: currentShareObj.title,
+            text: `ScriptVault Shared Content: ${currentShareObj.title}`,
+            url: url
+        }).catch(() => {});
+    } else {
+        copyShareModalLink();
+    }
+}
+
+function toggleExportMenu(dropdownId) {
+    const menu = document.getElementById(dropdownId);
+    if (!menu) return;
+    const isOpen = menu.style.display === "block";
+    
+    document.querySelectorAll(".export-dropdown-menu").forEach(m => m.style.display = "none");
+    menu.style.display = isOpen ? "none" : "block";
+}
+
+document.addEventListener("click", (e) => {
+    if (!e.target.closest(".export-dropdown-menu") && !e.target.closest("button[onclick*='toggleExportMenu']")) {
+        document.querySelectorAll(".export-dropdown-menu").forEach(m => m.style.display = "none");
+    }
+});
+
+// ====================================================
+// MULTI-FORMAT EXPORT ENGINE (PDF, ZIP, EXCEL, TXT)
+// ====================================================
+function exportCurrentNotePDF() {
+    const titleInput = document.getElementById("note-title-input");
+    const contentInput = document.getElementById("note-content-input");
+    const title = ((titleInput ? titleInput.value : "") || "notepad_note").replace(/[^a-zA-Z0-9_-]/g, "_");
+    const content = contentInput ? contentInput.value : "";
+
+    const exportDiv = document.createElement("div");
+    exportDiv.style.padding = "20px";
+    exportDiv.style.fontFamily = "Arial, sans-serif";
+    exportDiv.innerHTML = `
+        <h1 style="color:#09090b; border-bottom:2px solid #6366f1; padding-bottom:8px;">${titleInput ? titleInput.value : "Untitled Note"}</h1>
+        <p style="color:#64748b; font-size:12px;">ScriptVault Notepad Export &bull; Date: ${new Date().toLocaleDateString()}</p>
+        <hr style="border:0; border-top:1px solid #e2e8f0; margin:15px 0;">
+        <div style="font-size:14px; line-height:1.6; color:#1e293b; white-space:pre-wrap;">${window.marked ? marked.parse(content) : content}</div>
+    `;
+
+    if (window.html2pdf) {
+        const opt = {
+            margin: 10,
+            filename: `${title}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2 },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+        html2pdf().set(opt).from(exportDiv).save();
+        showToast("Exporting PDF...", "info");
+    } else {
+        showToast("PDF generator loading...", "warning");
+    }
+}
+
+function exportCurrentNoteZIP() {
+    if (!window.JSZip) {
+        showToast("ZIP engine loading...", "warning");
+        return;
+    }
+
+    const titleInput = document.getElementById("note-title-input");
+    const contentInput = document.getElementById("note-content-input");
+    const title = ((titleInput ? titleInput.value : "") || "notepad_note").replace(/[^a-zA-Z0-9_-]/g, "_");
+    const content = contentInput ? contentInput.value : "";
+
+    const zip = new JSZip();
+    zip.file(`${title}.txt`, content);
+    zip.file(`${title}.md`, `# ${titleInput ? titleInput.value : "Note"}\n\n${content}`);
+    zip.file("INFO.txt", `Exported from ScriptVault Notepad\nTitle: ${titleInput ? titleInput.value : "Note"}\nDate: ${new Date().toLocaleString()}`);
+
+    zip.generateAsync({ type: "blob" }).then(function(blob) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${title}.zip`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast("ZIP archive downloaded!", "success");
+    });
+}
+
+function exportCurrentNoteTXT() {
+    const titleInput = document.getElementById("note-title-input");
+    const contentInput = document.getElementById("note-content-input");
+    const title = ((titleInput ? titleInput.value : "") || "notepad_note").replace(/[^a-zA-Z0-9_-]/g, "_");
+    const content = contentInput ? contentInput.value : "";
+
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${title}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("Text file downloaded!", "success");
+}
+
+function exportCurrentNoteExcel() {
+    window.location.href = "/notes/export/excel";
+}
+
+function exportAllNotesExcel() {
+    window.location.href = "/notes/export/excel";
+}
+
+function exportAllNotesZip() {
+    if (!allNotes || allNotes.length === 0) {
+        showToast("No notes found to export.", "warning");
+        return;
+    }
+    if (!window.JSZip) {
+        showToast("ZIP engine loading...", "warning");
+        return;
+    }
+
+    const zip = new JSZip();
+    const folder = zip.folder("scriptvault_notes");
+
+    allNotes.forEach((n, idx) => {
+        const cleanTitle = (n.title || `note_${idx+1}`).replace(/[^a-zA-Z0-9_-]/g, "_");
+        folder.file(`${cleanTitle}.md`, `# ${n.title}\n\nCreated: ${n.created_at}\n\n${n.content || ""}`);
+    });
+
+    zip.generateAsync({ type: "blob" }).then(function(blob) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "all_scriptvault_notes.zip";
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast(`Exported ${allNotes.length} note(s) to ZIP archive!`, "success");
+    });
 }

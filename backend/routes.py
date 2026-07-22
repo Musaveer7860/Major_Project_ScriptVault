@@ -2,13 +2,18 @@ import re
 import html
 import os
 import sys
+import io
 import tempfile
 import subprocess
 from datetime import datetime
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Request, UploadFile, File
 from pydantic import BaseModel, Field
 from bson import ObjectId
+
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
 
 from database import get_db
 from auth import (
@@ -1370,3 +1375,413 @@ async def ai_analyze_snippet(payload: SnippetAIAnalyzeSchema, current_user: dict
     from ai_analyzer import run_ai_analysis
     analysis = run_ai_analysis(payload.code, payload.language, other_snippets, payload.id)
     return analysis
+
+# ==========================================
+# EXCEL INTEGRATION ENDPOINTS
+# ==========================================
+
+@router.get("/snippets/export/excel")
+async def export_snippets_to_excel(
+    workspace_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    db = get_db()
+    user_uid = ObjectId(current_user["_id"])
+    
+    query = {"user_id": user_uid}
+    if workspace_id:
+        try:
+            query["workspace_id"] = ObjectId(workspace_id)
+        except Exception:
+            pass
+
+    snippets = list(db.snippets.find(query).sort([("created_at", -1)]))
+    
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "ScriptVault Snippets"
+    
+    # Enable gridlines
+    ws.views.sheetView[0].showGridLines = True
+    
+    headers = ["Title", "Language", "Tags", "Code Snippet", "Description", "Pinned", "Archived", "Created Date"]
+    ws.append(headers)
+    
+    # Header styling (Indigo background, bold white text)
+    header_fill = PatternFill(start_color="4F46E5", end_color="4F46E5", fill_type="solid")
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    header_alignment = Alignment(horizontal="left", vertical="center")
+    
+    for col_num in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=col_num)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = header_alignment
+    
+    # Add Data Rows
+    for snippet in snippets:
+        tags_str = ", ".join(snippet.get("tags", [])) if isinstance(snippet.get("tags"), list) else str(snippet.get("tags", ""))
+        created = snippet.get("created_at")
+        created_str = created.strftime("%Y-%m-%d %H:%M:%S") if isinstance(created, datetime) else str(created or "")
+        
+        row_data = [
+            snippet.get("title", ""),
+            snippet.get("language", ""),
+            tags_str,
+            snippet.get("code", ""),
+            snippet.get("description", ""),
+            "Yes" if snippet.get("pinned") else "No",
+            "Yes" if snippet.get("archived") else "No",
+            created_str
+        ]
+        ws.append(row_data)
+        
+    # Formatting column widths
+    for col in ws.columns:
+        max_len = 0
+        col_letter = get_column_letter(col[0].column)
+        for cell in col:
+            val = str(cell.value or "")
+            if "\n" in val:
+                val = val.split("\n")[0]
+            max_len = max(max_len, len(val))
+        if col_letter in ['D', 'E']:
+            ws.column_dimensions[col_letter].width = min(max(max_len + 3, 25), 60)
+        else:
+            ws.column_dimensions[col_letter].width = min(max(max_len + 3, 12), 40)
+            
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    file_timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+    return Response(
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f"attachment; filename=scriptvault_snippets_{file_timestamp}.xlsx"
+        }
+    )
+
+
+@router.get("/snippets/export/template")
+async def download_excel_template(current_user: dict = Depends(get_current_user)):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Import Template"
+    
+    ws.views.sheetView[0].showGridLines = True
+    
+    headers = ["Title", "Language", "Tags", "Code", "Description"]
+    ws.append(headers)
+    
+    header_fill = PatternFill(start_color="16A34A", end_color="16A34A", fill_type="solid")
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    header_alignment = Alignment(horizontal="left", vertical="center")
+    
+    for col_num in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=col_num)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = header_alignment
+
+    sample_rows = [
+        [
+            "Binary Search Algorithm",
+            "Python",
+            "algorithm, search, binary",
+            "def binary_search(arr, target):\n    low, high = 0, len(arr) - 1\n    while low <= high:\n        mid = (low + high) // 2\n        if arr[mid] == target:\n            return mid\n        elif arr[mid] < target:\n            low = mid + 1\n        else:\n            high = mid - 1\n    return -1",
+            "Efficient O(log n) binary search implementation in Python."
+        ],
+        [
+            "Async Fetch API Helper",
+            "JavaScript",
+            "async, fetch, api, http",
+            "async function fetchData(url) {\n    const response = await fetch(url);\n    if (!response.ok) {\n        throw new Error(`HTTP error! Status: ${response.status}`);\n    }\n    return await response.json();\n}",
+            "Reusable asynchronous fetch wrapper with error handling."
+        ]
+    ]
+    
+    for row in sample_rows:
+        ws.append(row)
+        
+    for col in ws.columns:
+        max_len = 0
+        col_letter = get_column_letter(col[0].column)
+        for cell in col:
+            val = str(cell.value or "")
+            if "\n" in val:
+                val = val.split("\n")[0]
+            max_len = max(max_len, len(val))
+        if col_letter in ['D', 'E']:
+            ws.column_dimensions[col_letter].width = 45
+        else:
+            ws.column_dimensions[col_letter].width = min(max(max_len + 3, 15), 35)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    return Response(
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": "attachment; filename=scriptvault_import_template.xlsx"
+        }
+    )
+
+
+@router.post("/snippets/import/excel")
+async def import_snippets_from_excel(
+    file: UploadFile = File(...),
+    workspace_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    if not file.filename.lower().endswith(('.xlsx', '.xls')):
+        raise HTTPException(status_code=400, detail="Invalid file type. Please upload a valid Microsoft Excel file (.xlsx or .xls).")
+        
+    db = get_db()
+    user_uid = ObjectId(current_user["_id"])
+    
+    # Determine target workspace
+    ws_oid = None
+    if workspace_id:
+        try:
+            ws_oid = ObjectId(workspace_id)
+        except Exception:
+            pass
+            
+    if not ws_oid:
+        ws = db.workspaces.find_one({"user_id": user_uid})
+        if not ws:
+            ws_oid = db.workspaces.insert_one({
+                "user_id": user_uid,
+                "name": "Personal Workspace",
+                "created_at": datetime.utcnow()
+            }).inserted_id
+        else:
+            ws_oid = ws["_id"]
+
+    contents = await file.read()
+    
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents), data_only=True)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not read Excel file: {str(e)}")
+        
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    
+    if not rows:
+        raise HTTPException(status_code=400, detail="The uploaded Excel file is empty.")
+        
+    # Header detection
+    headers = [str(cell).strip().lower() if cell is not None else "" for cell in rows[0]]
+    
+    title_idx = -1
+    lang_idx = -1
+    tags_idx = -1
+    code_idx = -1
+    desc_idx = -1
+    
+    for idx, h in enumerate(headers):
+        if "title" in h or "name" in h:
+            title_idx = idx
+        elif "lang" in h:
+            lang_idx = idx
+        elif "tag" in h:
+            tags_idx = idx
+        elif "code" in h or "snippet" in h or "content" in h:
+            code_idx = idx
+        elif "desc" in h or "note" in h or "summary" in h:
+            desc_idx = idx
+            
+    if code_idx == -1:
+        if len(headers) >= 4:
+            title_idx = 0
+            lang_idx = 1
+            tags_idx = 2
+            code_idx = 3
+            if len(headers) >= 5:
+                desc_idx = 4
+        else:
+            raise HTTPException(status_code=400, detail="Could not identify 'Code' column in Excel header. Header must contain 'Title', 'Language', 'Tags', 'Code'.")
+
+    imported_count = 0
+    skipped_count = 0
+    now = datetime.utcnow()
+    
+    for row in rows[1:]:
+        if not row or all(c is None or str(c).strip() == "" for c in row):
+            continue
+            
+        raw_code = str(row[code_idx]).strip() if code_idx < len(row) and row[code_idx] is not None else ""
+        if not raw_code:
+            skipped_count += 1
+            continue
+            
+        raw_title = str(row[title_idx]).strip() if title_idx >= 0 and title_idx < len(row) and row[title_idx] is not None else "Untitled Snippet"
+        raw_lang = str(row[lang_idx]).strip().lower() if lang_idx >= 0 and lang_idx < len(row) and row[lang_idx] is not None else "python"
+        raw_tags = str(row[tags_idx]).strip() if tags_idx >= 0 and tags_idx < len(row) and row[tags_idx] is not None else ""
+        raw_desc = str(row[desc_idx]).strip() if desc_idx >= 0 and desc_idx < len(row) and row[desc_idx] is not None else ""
+        
+        normalized_lang = SUPPORTED_LANGUAGES.get(raw_lang, "Python")
+        
+        tag_list = [t.strip() for t in re.split(r'[,;]', raw_tags) if t.strip()]
+        clean_tags = [sanitize_text(t) for t in tag_list]
+        
+        clean_title = sanitize_text(raw_title) or "Untitled Snippet"
+        clean_code = sanitize_code_string(raw_code)
+        clean_desc = sanitize_text(raw_desc)
+        
+        doc = {
+            "user_id": user_uid,
+            "workspace_id": ws_oid,
+            "collection_id": None,
+            "title": clean_title,
+            "language": normalized_lang,
+            "tags": clean_tags,
+            "code": clean_code,
+            "description": clean_desc,
+            "favorite": False,
+            "pinned": False,
+            "archived": False,
+            "created_at": now,
+            "updated_at": now,
+            "versions": [
+                {
+                    "version_id": 1,
+                    "code": clean_code,
+                    "updated_at": now
+                }
+            ]
+        }
+        
+        db.snippets.insert_one(doc)
+        imported_count += 1
+        
+    return {
+        "status": "success",
+        "imported_count": imported_count,
+        "skipped_count": skipped_count,
+        "message": f"Successfully imported {imported_count} snippet(s) from Excel file."
+    }
+
+# ==========================================
+# PUBLIC SHARE & NOTES EXCEL EXPORT ENDPOINTS
+# ==========================================
+
+@router.get("/public/note/{id}")
+async def get_public_note(id: str):
+    db = get_db()
+    try:
+        obj_id = ObjectId(id)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid note ID format.")
+        
+    note = db.notes.find_one({"_id": obj_id})
+    if not note:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shared note not found or has been removed.")
+        
+    user = db.users.find_one({"_id": note["user_id"]})
+    author_name = user["username"] if user else "ScriptVault User"
+    
+    formatted = format_note(note)
+    formatted["author"] = author_name
+    return formatted
+
+@router.get("/public/snippet/{id}")
+async def get_public_snippet(id: str):
+    db = get_db()
+    try:
+        obj_id = ObjectId(id)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid snippet ID format.")
+        
+    snippet = db.snippets.find_one({"_id": obj_id})
+    if not snippet:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shared snippet not found or has been removed.")
+        
+    user = db.users.find_one({"_id": snippet["user_id"]})
+    author_name = user["username"] if user else "ScriptVault User"
+    
+    formatted = format_snippet(snippet)
+    formatted["author"] = author_name
+    return formatted
+
+@router.get("/notes/export/excel")
+async def export_notes_to_excel(
+    workspace_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    db = get_db()
+    user_uid = ObjectId(current_user["_id"])
+    
+    query = {"user_id": user_uid}
+    if workspace_id:
+        try:
+            query["workspace_id"] = ObjectId(workspace_id)
+        except Exception:
+            pass
+
+    notes = list(db.notes.find(query).sort([("updated_at", -1)]))
+    
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "ScriptVault Notes"
+    
+    ws.views.sheetView[0].showGridLines = True
+    
+    headers = ["Note Title", "Content Preview / Full Note", "Created Date", "Last Updated"]
+    ws.append(headers)
+    
+    header_fill = PatternFill(start_color="0EA5E9", end_color="0EA5E9", fill_type="solid")
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    header_alignment = Alignment(horizontal="left", vertical="center")
+    
+    for col_num in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=col_num)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = header_alignment
+    
+    for note in notes:
+        created = note.get("created_at")
+        updated = note.get("updated_at", created)
+        created_str = created.strftime("%Y-%m-%d %H:%M:%S") if isinstance(created, datetime) else str(created or "")
+        updated_str = updated.strftime("%Y-%m-%d %H:%M:%S") if isinstance(updated, datetime) else str(updated or "")
+        
+        row_data = [
+            note.get("title", "Untitled Note"),
+            note.get("content", ""),
+            created_str,
+            updated_str
+        ]
+        ws.append(row_data)
+        
+    for col in ws.columns:
+        max_len = 0
+        col_letter = get_column_letter(col[0].column)
+        for cell in col:
+            val = str(cell.value or "")
+            if "\n" in val:
+                val = val.split("\n")[0]
+            max_len = max(max_len, len(val))
+        if col_letter == 'B':
+            ws.column_dimensions[col_letter].width = 65
+        else:
+            ws.column_dimensions[col_letter].width = min(max(max_len + 3, 20), 45)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    return Response(
+        content=output.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": "attachment; filename=scriptvault_notes.xlsx"
+        }
+    )
+
+
