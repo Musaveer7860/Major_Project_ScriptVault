@@ -2971,39 +2971,52 @@ let currentShareObj = { type: 'note', id: null, title: '', content: '' };
 
 async function openShareModal(type = 'note', id = null) {
     const modal = document.getElementById("share-modal");
-    if (!modal) return;
+    if (!modal) {
+        console.error("share-modal element not found in DOM");
+        return;
+    }
 
     let targetId = id;
     let title = "Shared Item";
     let contentText = "";
 
-    if (type === 'note') {
-        if (!targetId) targetId = activeNoteId;
-        if (!targetId) {
-            await saveCurrentNote();
-            targetId = activeNoteId;
-        }
-        const titleInput = document.getElementById("note-title-input");
-        const contentInput = document.getElementById("note-content-input");
-        title = (titleInput ? titleInput.value : "").trim() || "Shared Note";
-        contentText = contentInput ? contentInput.value : "";
-    } else if (type === 'snippet') {
-        if (targetId) {
-            const snip = allSnippets.find(s => s.id === targetId);
-            if (snip) {
-                title = snip.title;
-                contentText = snip.code;
+    try {
+        if (type === 'note') {
+            if (!targetId) targetId = activeNoteId;
+            if (!targetId) {
+                try {
+                    await saveCurrentNote();
+                } catch(e) {}
+                targetId = activeNoteId;
             }
+            const titleInput = document.getElementById("note-title-input");
+            const contentInput = document.getElementById("note-content-input");
+            title = (titleInput ? titleInput.value : "").trim() || "Shared Note";
+            contentText = contentInput ? contentInput.value : "";
+        } else if (type === 'snippet') {
+            if (targetId) {
+                const snip = allSnippets.find(s => s.id === targetId);
+                if (snip) {
+                    title = snip.title;
+                    contentText = snip.code;
+                }
+            }
+        } else if (type === 'sheet') {
+            const titleInput = document.getElementById("excel-sheet-title");
+            title = (titleInput ? titleInput.value : "").trim() || "Shared Spreadsheet";
+            contentText = JSON.stringify(excelGridData);
         }
-    } else if (type === 'sheet') {
-        const titleInput = document.getElementById("excel-sheet-title");
-        title = (titleInput ? titleInput.value : "").trim() || "Shared Spreadsheet";
-        contentText = JSON.stringify(excelGridData);
+    } catch(err) {
+        console.error("Error building share object:", err);
     }
 
     currentShareObj = { type, id: targetId, title, content: contentText };
 
-    const shareUrl = `${window.location.origin}/share?type=${type}&id=${targetId || 'active'}`;
+    let shareUrl = `${window.location.origin}/share?type=${type}&id=${targetId || 'active'}`;
+    if (!targetId && contentText) {
+        shareUrl += `&title=${encodeURIComponent(title)}&text=${encodeURIComponent(contentText.substring(0, 300))}`;
+    }
+
     const urlInput = document.getElementById("share-modal-url");
     if (urlInput) urlInput.value = shareUrl;
 
@@ -3197,3 +3210,22 @@ function exportAllNotesZip() {
         showToast(`Exported ${allNotes.length} note(s) to ZIP archive!`, "success");
     });
 }
+
+// Explicitly expose share & export functions on window object for inline HTML onclick attributes
+window.openShareModal = openShareModal;
+window.closeShareModal = closeShareModal;
+window.copyShareModalLink = copyShareModalLink;
+window.shareToWhatsApp = shareToWhatsApp;
+window.shareToTwitter = shareToTwitter;
+window.shareToEmail = shareToEmail;
+window.triggerWebShare = triggerWebShare;
+window.toggleExportMenu = toggleExportMenu;
+window.exportCurrentNotePDF = exportCurrentNotePDF;
+window.exportCurrentNoteZIP = exportCurrentNoteZIP;
+window.exportCurrentNoteTXT = exportCurrentNoteTXT;
+window.exportCurrentNoteExcel = exportCurrentNoteExcel;
+window.exportAllNotesExcel = exportAllNotesExcel;
+window.exportAllNotesZip = exportAllNotesZip;
+window.importExcelFileToGrid = importExcelFileToGrid;
+window.exportGridToExcel = exportGridToExcel;
+window.exportGridToCSV = exportGridToCSV;

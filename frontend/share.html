@@ -202,57 +202,70 @@
             const urlParams = new URLSearchParams(window.location.search);
             const id = urlParams.get('id');
             const type = urlParams.get('type') || 'note';
+            const fallbackTitle = urlParams.get('title');
+            const fallbackText = urlParams.get('text');
             contentType = type;
 
-            if (!id) {
+            if (!id && !fallbackText) {
                 showError("Invalid share URL. Content ID missing.");
                 return;
             }
 
-            try {
-                const endpoint = type === 'snippet' ? `/public/snippet/${id}` : `/public/note/${id}`;
-                const res = await fetch(endpoint);
-                if (!res.ok) {
-                    throw new Error("Content not found or private.");
-                }
-                const data = await res.json();
-                loadedContent = data;
-
-                document.getElementById("share-loading").style.display = "none";
-                document.getElementById("share-content-wrapper").style.display = "block";
-
-                document.getElementById("share-title").textContent = data.title || "Untitled";
-                document.getElementById("share-author").textContent = data.author || "ScriptVault User";
-                document.getElementById("share-date").textContent = new Date(data.created_at).toLocaleDateString();
-
-                const badge = document.getElementById("share-type-badge");
-                if (type === 'snippet') {
-                    badge.textContent = `Snippet (${data.language || 'Code'})`;
-                    badge.style.background = "#064e3b";
-                    badge.style.color = "#a7f3d0";
-                    
-                    const codeBox = document.createElement("pre");
-                    const codeEl = document.createElement("code");
-                    codeEl.className = `language-${(data.language || 'javascript').toLowerCase()}`;
-                    codeEl.textContent = data.code || "";
-                    codeBox.appendChild(codeEl);
-                    
-                    const body = document.getElementById("share-content-body");
-                    body.innerHTML = "";
-                    body.appendChild(codeBox);
-                    if (window.Prism) Prism.highlightElement(codeEl);
-                } else {
-                    badge.textContent = "Notepad Note";
-                    const body = document.getElementById("share-content-body");
-                    body.className = "share-content-box markdown-preview";
-                    if (window.marked) {
-                        body.innerHTML = marked.parse(data.content || "");
-                    } else {
-                        body.textContent = data.content || "";
+            let data = null;
+            if (id && id !== 'draft' && id !== 'active') {
+                try {
+                    const endpoint = type === 'snippet' ? `/public/snippet/${id}` : `/public/note/${id}`;
+                    const res = await fetch(endpoint);
+                    if (res.ok) {
+                        data = await res.json();
                     }
+                } catch(e) {}
+            }
+
+            if (!data) {
+                data = {
+                    title: fallbackTitle || "Shared Note",
+                    author: "ScriptVault User",
+                    created_at: new Date().toISOString(),
+                    content: fallbackText || "No content preview available.",
+                    code: fallbackText || ""
+                };
+            }
+
+            loadedContent = data;
+
+            document.getElementById("share-loading").style.display = "none";
+            document.getElementById("share-content-wrapper").style.display = "block";
+
+            document.getElementById("share-title").textContent = data.title || "Untitled";
+            document.getElementById("share-author").textContent = data.author || "ScriptVault User";
+            document.getElementById("share-date").textContent = new Date(data.created_at || Date.now()).toLocaleDateString();
+
+            const badge = document.getElementById("share-type-badge");
+            if (type === 'snippet') {
+                badge.textContent = `Snippet (${data.language || 'Code'})`;
+                badge.style.background = "#064e3b";
+                badge.style.color = "#a7f3d0";
+                
+                const codeBox = document.createElement("pre");
+                const codeEl = document.createElement("code");
+                codeEl.className = `language-${(data.language || 'javascript').toLowerCase()}`;
+                codeEl.textContent = data.code || data.content || "";
+                codeBox.appendChild(codeEl);
+                
+                const body = document.getElementById("share-content-body");
+                body.innerHTML = "";
+                body.appendChild(codeBox);
+                if (window.Prism) Prism.highlightElement(codeEl);
+            } else {
+                badge.textContent = "Notepad Note";
+                const body = document.getElementById("share-content-body");
+                body.className = "share-content-box markdown-preview";
+                if (window.marked) {
+                    body.innerHTML = marked.parse(data.content || "");
+                } else {
+                    body.textContent = data.content || "";
                 }
-            } catch (err) {
-                showError(err.message || "Failed to load shared content.");
             }
         }
 
