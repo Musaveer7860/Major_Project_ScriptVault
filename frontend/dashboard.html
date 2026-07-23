@@ -6,7 +6,7 @@
     <title>Dashboard - ScriptVault</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
-    <link rel="stylesheet" href="css/style.css?v=100">
+    <link rel="stylesheet" href="css/style.css?v=300">
     <!-- Monaco Editor CSS & Loader -->
     <link rel="stylesheet" data-name="vs/editor/editor.main" href="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.39.0/min/vs/editor/editor.main.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.39.0/min/vs/loader.min.js"></script>
@@ -222,7 +222,7 @@
                 <!-- Saved Notepad View Container -->
                 <div id="notes-view" style="display: none;">
                     <div class="notes-container" style="display: grid; grid-template-columns: 300px 1fr; gap: 0; height: calc(100vh - 160px); background: #ffffff; border: 1px solid var(--border-color); border-radius: 6px; overflow: hidden;">
-                        <aside class="notes-sidebar" style="border-right: 1px solid var(--border-color); display: flex; flex-direction: column; background: #fcfcfd; height: 100%;">
+                        <aside class="notes-sidebar" style="border-right: 1px solid var(--border-color); display: flex; flex-direction: column; background: #fcfcfd; height: 100%; min-height: 0; max-height: 100%;">
                             <div class="notes-sidebar-header" style="padding: 1rem; border-bottom: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 0.75rem;">
                                 <button class="btn btn-primary" style="width: 100%; justify-content: center;" onclick="createNewNote()">
                                     <i class="fa-solid fa-plus"></i> New Note
@@ -240,7 +240,7 @@
                                     <input type="text" id="note-search-bar" class="form-control" placeholder="Search notes..." oninput="handleNoteSearch(this.value)" style="padding-left: 2.25rem; font-size: 0.8rem; height: 32px; width: 100%;">
                                 </div>
                             </div>
-                            <div class="notes-list" id="notes-list-container" style="overflow-y: auto; flex: 1; display: flex; flex-direction: column;">
+                            <div class="notes-list" id="notes-list-container" style="overflow-y: auto; flex: 1; display: flex; flex-direction: column; min-height: 0; max-height: 100%;">
                                 <!-- Dynamically populated note list items -->
                             </div>
                         </aside>
@@ -806,6 +806,6 @@
     </script>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
-    <script src="js/dashboard.js?v=200"></script>
+    <script src="js/dashboard.js?v=300"></script>
 </body>
 </html>

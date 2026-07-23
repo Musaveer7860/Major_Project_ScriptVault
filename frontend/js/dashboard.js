@@ -2985,17 +2985,18 @@ async function openShareModal(type = 'note', id = null) {
 
     try {
         if (type === 'note') {
+            const titleInput = document.getElementById("note-title-input");
+            const contentInput = document.getElementById("note-content-input");
+            title = (titleInput ? titleInput.value : "").trim() || "Shared Note";
+            contentText = contentInput ? contentInput.value : "";
+
             if (!targetId) targetId = activeNoteId;
-            if (!targetId) {
+            if (!targetId && (title || contentText)) {
                 try {
                     await saveCurrentNote();
                 } catch(e) {}
                 targetId = activeNoteId;
             }
-            const titleInput = document.getElementById("note-title-input");
-            const contentInput = document.getElementById("note-content-input");
-            title = (titleInput ? titleInput.value : "").trim() || "Shared Note";
-            contentText = contentInput ? contentInput.value : "";
         } else if (type === 'snippet') {
             if (targetId) {
                 const snip = allSnippets.find(s => s.id === targetId);
@@ -3015,15 +3016,22 @@ async function openShareModal(type = 'note', id = null) {
 
     currentShareObj = { type, id: targetId, title, content: contentText };
 
-    let shareUrl = `${window.location.origin}/share?type=${type}&id=${targetId || 'active'}`;
-    if (!targetId && contentText) {
-        shareUrl += `&title=${encodeURIComponent(title)}&text=${encodeURIComponent(contentText.substring(0, 300))}`;
+    let shareUrl = `${window.location.origin}/share?type=${type}`;
+    if (targetId && targetId !== 'active' && targetId !== 'draft') {
+        shareUrl += `&id=${targetId}`;
+    }
+    if (title) {
+        shareUrl += `&title=${encodeURIComponent(title)}`;
+    }
+    if (contentText && contentText.length < 1000) {
+        shareUrl += `&text=${encodeURIComponent(contentText)}`;
     }
 
     const urlInput = document.getElementById("share-modal-url");
     if (urlInput) urlInput.value = shareUrl;
 
-    modal.style.display = "flex";
+    modal.style.setProperty("display", "flex", "important");
+    modal.style.zIndex = "999999";
 }
 
 function closeShareModal() {
@@ -3035,14 +3043,20 @@ function copyShareModalLink() {
     const input = document.getElementById("share-modal-url");
     if (input) {
         input.select();
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(input.value).then(() => {
-                showToast("Share link copied to clipboard!", "success");
-            }).catch(() => {
+        input.setSelectionRange(0, 99999);
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(input.value).then(() => {
+                    showToast("Share link copied to clipboard!", "success");
+                }).catch(() => {
+                    document.execCommand('copy');
+                    showToast("Share link copied to clipboard!", "success");
+                });
+            } else {
                 document.execCommand('copy');
                 showToast("Share link copied to clipboard!", "success");
-            });
-        } else {
+            }
+        } catch(e) {
             document.execCommand('copy');
             showToast("Share link copied to clipboard!", "success");
         }
@@ -3051,15 +3065,15 @@ function copyShareModalLink() {
 
 function shareToWhatsApp() {
     const urlInput = document.getElementById("share-modal-url");
-    const url = encodeURIComponent(urlInput ? urlInput.value : window.location.href);
-    const text = encodeURIComponent(`Check out this note on ScriptVault: ${currentShareObj.title}\n`);
-    window.open(`https://api.whatsapp.com/send?text=${text}${url}`, "_blank");
+    const url = urlInput ? urlInput.value : window.location.href;
+    const text = encodeURIComponent(`Check out "${currentShareObj.title || 'Shared Content'}" on ScriptVault:\n${url}`);
+    window.open(`https://wa.me/?text=${text}`, "_blank");
 }
 
 function shareToTwitter() {
     const urlInput = document.getElementById("share-modal-url");
     const url = encodeURIComponent(urlInput ? urlInput.value : window.location.href);
-    const text = encodeURIComponent(`Check out "${currentShareObj.title}" on ScriptVault!\n`);
+    const text = encodeURIComponent(`Check out "${currentShareObj.title || 'Shared Content'}" on ScriptVault!\n`);
     window.open(`https://twitter.com/intent/tweet?text=${text}&url=${url}`, "_blank");
 }
 

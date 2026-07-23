@@ -1132,4 +1132,36 @@ textarea.form-control {
     background: #f0fdf4;
 }
 
+/* Notes Sidebar Scrollbar & Flex Constraints */
+.notes-sidebar {
+    min-height: 0 !important;
+    max-height: 100% !important;
+}
+
+.notes-list, #notes-list-container {
+    overflow-y: auto !important;
+    overflow-x: hidden;
+    max-height: 100% !important;
+    min-height: 0 !important;
+    flex: 1 1 auto !important;
+}
+
+.notes-list::-webkit-scrollbar, #notes-list-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.notes-list::-webkit-scrollbar-track, #notes-list-container::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+
+.notes-list::-webkit-scrollbar-thumb, #notes-list-container::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+.notes-list::-webkit-scrollbar-thumb:hover, #notes-list-container::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}
+
+
 
