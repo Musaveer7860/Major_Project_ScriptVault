@@ -1712,19 +1712,27 @@ async def get_public_snippet(id: str):
 @router.get("/notes/export/excel")
 async def export_notes_to_excel(
     workspace_id: Optional[str] = None,
+    note_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
     db = get_db()
     user_uid = ObjectId(current_user["_id"])
     
     query = {"user_id": user_uid}
-    if workspace_id:
+    if note_id:
+        try:
+            query["_id"] = ObjectId(note_id)
+        except Exception:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid note ID format.")
+    elif workspace_id:
         try:
             query["workspace_id"] = ObjectId(workspace_id)
         except Exception:
             pass
 
     notes = list(db.notes.find(query).sort([("updated_at", -1)]))
+    if not notes:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No notes found to export.")
     
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -1776,11 +1784,16 @@ async def export_notes_to_excel(
     wb.save(output)
     output.seek(0)
     
+    filename = "scriptvault_notes.xlsx"
+    if note_id and len(notes) == 1:
+        clean_title = re.sub(r'[^a-zA-Z0-9_-]', '_', notes[0].get("title", "note"))
+        filename = f"{clean_title}.xlsx"
+
     return Response(
         content=output.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={
-            "Content-Disposition": "attachment; filename=scriptvault_notes.xlsx"
+            "Content-Disposition": f"attachment; filename={filename}"
         }
     )
 

@@ -2020,12 +2020,12 @@ function renderNotesList() {
 
     listDiv.innerHTML = "";
     
-    let filtered = allNotes;
+    let filtered = allNotes || [];
     if (noteSearchQuery) {
         const q = noteSearchQuery.toLowerCase();
         filtered = filtered.filter(n => 
-            n.title.toLowerCase().includes(q) || 
-            n.content.toLowerCase().includes(q)
+            (n.title || "").toLowerCase().includes(q) || 
+            (n.content || "").toLowerCase().includes(q)
         );
     }
     
@@ -2039,7 +2039,7 @@ function renderNotesList() {
     }
     
     filtered.forEach(note => {
-        const date = new Date(note.updated_at);
+        const date = new Date(note.updated_at || Date.now());
         const formattedDate = date.toLocaleDateString(undefined, { 
             month: 'short', 
             day: 'numeric', 
@@ -2068,9 +2068,13 @@ function handleNoteSearch(query) {
 }
 
 async function selectNote(noteId) {
+    // Flush autosave timer for current note before switching
     if (noteAutosaveTimer) {
         clearTimeout(noteAutosaveTimer);
-        await saveCurrentNote();
+        noteAutosaveTimer = null;
+        if (activeNoteId && activeNoteId !== noteId) {
+            await saveCurrentNote(activeNoteId);
+        }
     }
     
     activeNoteId = noteId;
@@ -2100,8 +2104,9 @@ async function selectNote(noteId) {
         document.getElementById("note-title-input").value = note.title || "";
         document.getElementById("note-content-input").value = note.content || "";
         
-        // Reset view tab to edit mode
+        // Reset view tab to edit mode & update live stats
         toggleNoteTab('edit');
+        updateNotepadStats();
         document.getElementById("note-save-status").textContent = "";
     } catch (err) {
         showToast(err.message, "error");
@@ -2110,6 +2115,11 @@ async function selectNote(noteId) {
 
 async function createNewNote() {
     try {
+        if (noteAutosaveTimer) {
+            clearTimeout(noteAutosaveTimer);
+            noteAutosaveTimer = null;
+        }
+
         const response = await fetch("/notes", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -2137,15 +2147,19 @@ async function createNewNote() {
     }
 }
 
-async function saveCurrentNote() {
-    const title = document.getElementById("note-title-input").value.trim() || "Untitled Note";
-    const content = document.getElementById("note-content-input").value;
+async function saveCurrentNote(targetNoteId = activeNoteId) {
+    const titleInput = document.getElementById("note-title-input");
+    const contentInput = document.getElementById("note-content-input");
+    if (!titleInput || !contentInput) return;
+
+    const title = titleInput.value.trim() || "Untitled Note";
+    const content = contentInput.value;
     
     const saveStatus = document.getElementById("note-save-status");
     if (saveStatus) saveStatus.textContent = "Saving...";
     
     try {
-        if (!activeNoteId) {
+        if (!targetNoteId) {
             const response = await fetch("/notes", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -2164,7 +2178,7 @@ async function saveCurrentNote() {
             return;
         }
 
-        const response = await fetch(`/note/${activeNoteId}`, {
+        const response = await fetch(`/note/${targetNoteId}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ title, content })
@@ -2198,6 +2212,8 @@ function onNoteContentChange() {
     
     if (noteAutosaveTimer) clearTimeout(noteAutosaveTimer);
     
+    updateNotepadStats();
+
     // Autosave after 2 seconds of inactivity
     noteAutosaveTimer = setTimeout(() => {
         saveCurrentNote();
@@ -2241,15 +2257,15 @@ function toggleNoteTab(tabName) {
     const previewPane = document.getElementById("note-preview-pane");
     
     if (tabName === 'edit') {
-        btnEdit.classList.add("active");
-        btnPreview.classList.remove("active");
-        editPane.style.display = "flex";
-        previewPane.style.display = "none";
+        if (btnEdit) btnEdit.classList.add("active");
+        if (btnPreview) btnPreview.classList.remove("active");
+        if (editPane) editPane.style.display = "flex";
+        if (previewPane) previewPane.style.display = "none";
     } else {
-        btnEdit.classList.remove("active");
-        btnPreview.classList.add("active");
-        editPane.style.display = "none";
-        previewPane.style.display = "block";
+        if (btnEdit) btnEdit.classList.remove("active");
+        if (btnPreview) btnPreview.classList.add("active");
+        if (editPane) editPane.style.display = "none";
+        if (previewPane) previewPane.style.display = "block";
         
         // Render Markdown content
         const markdownContent = document.getElementById("note-content-input").value;
@@ -2257,6 +2273,9 @@ function toggleNoteTab(tabName) {
             previewPane.innerHTML = marked.parse(markdownContent || "*No content written yet.*");
         } else {
             previewPane.innerHTML = escapeHtml(markdownContent || "No content").replace(/\n/g, "<br>");
+        }
+        if (window.Prism && previewPane) {
+            Prism.highlightAllUnder(previewPane);
         }
     }
 }
@@ -2575,12 +2594,17 @@ function renderExcelGrid() {
             if (cell.color) styleStr += `color: ${cell.color}; `;
 
             const activeClass = ref === activeCellRef ? "active-cell" : "";
+            // When editing active cell, show raw formula; otherwise show evaluated value
+            const inputVal = (ref === activeCellRef && document.activeElement && document.activeElement.dataset && document.activeElement.dataset.ref === ref) 
+                ? (cell.raw || "") 
+                : displayVal;
 
             html += `<td class="${activeClass}" style="${styleStr}">
-                <input type="text" data-ref="${ref}" value="${escapeHtmlAttr(displayVal)}" 
+                <input type="text" data-ref="${ref}" value="${escapeHtmlAttr(inputVal)}" 
                     onfocus="onExcelCellFocus('${ref}')" 
                     oninput="onExcelCellInput('${ref}', this.value)" 
-                    onblur="renderExcelGrid()">
+                    onkeydown="handleExcelCellKeydown(event, '${ref}')"
+                    onblur="onExcelCellBlur('${ref}')">
             </td>`;
         }
         html += "</tr>";
@@ -2610,6 +2634,53 @@ function onExcelCellFocus(ref) {
     const cell = excelGridData[ref] || { raw: "" };
     const formulaBar = document.getElementById("excel-formula-bar");
     if (formulaBar) formulaBar.value = cell.raw || "";
+
+    // Set cell input value to raw formula on focus
+    const cellInput = document.querySelector(`input[data-ref="${ref}"]`);
+    if (cellInput && cell.raw && String(cell.raw).startsWith("=")) {
+        cellInput.value = cell.raw;
+    }
+
+    // Sync toolbar formatting pickers
+    const bgColorInput = document.getElementById("excel-bg-color");
+    const textColorInput = document.getElementById("excel-text-color");
+    if (bgColorInput && cell.bg) bgColorInput.value = cell.bg;
+    if (textColorInput && cell.color) textColorInput.value = cell.color;
+}
+
+function onExcelCellBlur(ref) {
+    renderExcelGrid();
+}
+
+function handleExcelCellKeydown(event, ref) {
+    const colLetter = ref.replace(/\d+/g, '');
+    const rowNum = parseInt(ref.replace(/\D+/g, ''));
+    const colIdx = letterToColIndex(colLetter);
+
+    if (event.key === "Enter") {
+        event.preventDefault();
+        const nextRow = event.shiftKey ? Math.max(1, rowNum - 1) : Math.min(excelRows, rowNum + 1);
+        const nextRef = `${colLetter}${nextRow}`;
+        focusCellByRef(nextRef);
+    } else if (event.key === "Tab") {
+        event.preventDefault();
+        const nextColIdx = event.shiftKey ? Math.max(0, colIdx - 1) : Math.min(excelCols - 1, colIdx + 1);
+        const nextColLetter = colIndexToLetter(nextColIdx);
+        const nextRef = `${nextColLetter}${rowNum}`;
+        focusCellByRef(nextRef);
+    }
+}
+
+function focusCellByRef(ref) {
+    activeCellRef = ref;
+    renderExcelGrid();
+    setTimeout(() => {
+        const input = document.querySelector(`input[data-ref="${ref}"]`);
+        if (input) {
+            input.focus();
+            input.select();
+        }
+    }, 20);
 }
 
 function onExcelCellInput(ref, value) {
@@ -2620,6 +2691,11 @@ function onExcelCellInput(ref, value) {
     } else {
         excelGridData[ref].val = value;
     }
+
+    const formulaBar = document.getElementById("excel-formula-bar");
+    if (formulaBar && activeCellRef === ref) {
+        formulaBar.value = value;
+    }
 }
 
 function onFormulaBarInput(value) {
@@ -2627,41 +2703,82 @@ function onFormulaBarInput(value) {
     onExcelCellInput(activeCellRef, value);
     const cellInput = document.querySelector(`input[data-ref="${activeCellRef}"]`);
     if (cellInput) {
-        cellInput.value = String(value).startsWith("=") ? evaluateExcelFormula(value) : value;
+        cellInput.value = value;
     }
 }
 
 function evaluateExcelFormula(formula) {
+    if (!formula || typeof formula !== 'string' || !formula.startsWith("=")) return formula;
     try {
-        let clean = String(formula).substring(1).toUpperCase().trim();
+        let clean = formula.substring(1).toUpperCase().trim();
 
+        // 1. SUM(range)
         const sumMatch = clean.match(/^SUM\(([A-Z]+\d+):([A-Z]+\d+)\)$/);
         if (sumMatch) {
             const values = getCellRangeValues(sumMatch[1], sumMatch[2]);
-            return values.reduce((acc, num) => acc + (parseFloat(num) || 0), 0);
+            const nums = values.map(v => parseFloat(v)).filter(v => !isNaN(v));
+            return nums.reduce((acc, n) => acc + n, 0);
         }
 
+        // 2. AVERAGE(range)
         const avgMatch = clean.match(/^AVERAGE\(([A-Z]+\d+):([A-Z]+\d+)\)$/);
         if (avgMatch) {
-            const values = getCellRangeValues(avgMatch[1], avgMatch[2]).map(v => parseFloat(v) || 0);
-            if (values.length === 0) return 0;
-            return (values.reduce((acc, n) => acc + n, 0) / values.length).toFixed(2);
+            const values = getCellRangeValues(avgMatch[1], avgMatch[2]);
+            const nums = values.map(v => parseFloat(v)).filter(v => !isNaN(v));
+            if (nums.length === 0) return 0;
+            const avg = nums.reduce((acc, n) => acc + n, 0) / nums.length;
+            return Number.isInteger(avg) ? avg : parseFloat(avg.toFixed(2));
         }
 
+        // 3. COUNT(range)
         const countMatch = clean.match(/^COUNT\(([A-Z]+\d+):([A-Z]+\d+)\)$/);
         if (countMatch) {
             const values = getCellRangeValues(countMatch[1], countMatch[2]);
-            return values.filter(v => v !== "" && !isNaN(v)).length;
+            const nums = values.filter(v => v !== "" && v !== null && v !== undefined && !isNaN(parseFloat(v)));
+            return nums.length;
         }
 
+        // 4. MIN(range)
+        const minMatch = clean.match(/^MIN\(([A-Z]+\d+):([A-Z]+\d+)\)$/);
+        if (minMatch) {
+            const values = getCellRangeValues(minMatch[1], minMatch[2]);
+            const nums = values.map(v => parseFloat(v)).filter(v => !isNaN(v));
+            return nums.length ? Math.min(...nums) : 0;
+        }
+
+        // 5. MAX(range)
+        const maxMatch = clean.match(/^MAX\(([A-Z]+\d+):([A-Z]+\d+)\)$/);
+        if (maxMatch) {
+            const values = getCellRangeValues(maxMatch[1], maxMatch[2]);
+            const nums = values.map(v => parseFloat(v)).filter(v => !isNaN(v));
+            return nums.length ? Math.max(...nums) : 0;
+        }
+
+        // 6. PRODUCT(range)
+        const prodMatch = clean.match(/^PRODUCT\(([A-Z]+\d+):([A-Z]+\d+)\)$/);
+        if (prodMatch) {
+            const values = getCellRangeValues(prodMatch[1], prodMatch[2]);
+            const nums = values.map(v => parseFloat(v)).filter(v => !isNaN(v));
+            return nums.length ? nums.reduce((acc, n) => acc * n, 1) : 0;
+        }
+
+        // Replace cell references with their numeric/eval value
         clean = clean.replace(/([A-Z]+\d+)/g, (match) => {
             const cell = excelGridData[match];
-            const v = cell ? (cell.val !== undefined ? cell.val : cell.raw) : 0;
-            return isNaN(v) ? 0 : v;
+            if (!cell) return "0";
+            let v = cell.val !== undefined ? cell.val : cell.raw;
+            if (String(v).startsWith("=")) {
+                v = evaluateExcelFormula(v);
+            }
+            if (v === "" || v === null || v === undefined) return "0";
+            return isNaN(v) ? `"${String(v).replace(/"/g, '\\"')}"` : v;
         });
 
         const evalResult = Function(`"use strict"; return (${clean})`)();
-        return isNaN(evalResult) ? "#VALUE!" : evalResult;
+        if (typeof evalResult === "number") {
+            return isNaN(evalResult) ? "#VALUE!" : (Number.isInteger(evalResult) ? evalResult : parseFloat(evalResult.toFixed(4)));
+        }
+        return evalResult !== undefined && evalResult !== null ? evalResult : "";
     } catch (e) {
         return "#ERROR!";
     }
@@ -2684,7 +2801,11 @@ function getCellRangeValues(startRef, endRef) {
             const ref = `${colIndexToLetter(c)}${r}`;
             const cell = excelGridData[ref];
             if (cell) {
-                values.push(cell.val !== undefined ? cell.val : cell.raw);
+                let v = cell.val !== undefined ? cell.val : cell.raw;
+                if (String(cell.raw).startsWith("=")) {
+                    v = evaluateExcelFormula(cell.raw);
+                }
+                values.push(v);
             }
         }
     }
@@ -2748,6 +2869,23 @@ function loadExcelTemplate(templateKey) {
             "A3": { raw: "Quick Sort" }, "B3": { raw: "Python" }, "C3": { raw: "algo, sorting" }, "D3": { raw: "Divide & Conquer O(n log n)" },
             "A4": { raw: "Database Connection" }, "B4": { raw: "Java" }, "C4": { raw: "sql, jdbc" }, "D4": { raw: "JDBC Driver setup" }
         };
+    } else if (templateKey === "notes") {
+        excelGridData = {
+            "A1": { raw: "Note Title", bold: true, bg: "#e0f2fe" },
+            "B1": { raw: "Content Preview", bold: true, bg: "#e0f2fe" },
+            "C1": { raw: "Updated Date", bold: true, bg: "#e0f2fe" }
+        };
+        if (allNotes && allNotes.length > 0) {
+            allNotes.forEach((n, idx) => {
+                const row = idx + 2;
+                excelGridData[`A${row}`] = { raw: n.title || "Untitled Note" };
+                excelGridData[`B${row}`] = { raw: (n.content || "").substring(0, 50).replace(/\n/g, ' ') };
+                excelGridData[`C${row}`] = { raw: new Date(n.updated_at || Date.now()).toLocaleDateString() };
+            });
+            excelRows = Math.max(20, allNotes.length + 5);
+        } else {
+            excelGridData["A2"] = { raw: "No notes saved yet." };
+        }
     } else if (templateKey === "budget") {
         excelGridData = {
             "A1": { raw: "Expense Item", bold: true, bg: "#fef3c7" },
@@ -2888,24 +3026,88 @@ function applyNotepadFormat(type) {
     const selectedText = textarea.value.substring(start, end);
 
     let replacement = "";
-    if (type === "bold") replacement = `**${selectedText || "Bold text"}**`;
-    else if (type === "italic") replacement = `*${selectedText || "Italic text"}*`;
-    else if (type === "underline") replacement = `<u>${selectedText || "Underlined text"}</u>`;
-    else if (type === "strikethrough") replacement = `~~${selectedText || "Strikethrough text"}~~`;
-    else if (type === "h1") replacement = `\n# ${selectedText || "Heading 1"}\n`;
-    else if (type === "h2") replacement = `\n## ${selectedText || "Heading 2"}\n`;
-    else if (type === "h3") replacement = `\n### ${selectedText || "Heading 3"}\n`;
-    else if (type === "ul") replacement = `\n- ${selectedText || "List item"}\n`;
-    else if (type === "ol") replacement = `\n1. ${selectedText || "List item"}\n`;
-    else if (type === "checklist") replacement = `\n- [ ] ${selectedText || "Task item"}\n`;
-    else if (type === "code") replacement = `\`${selectedText || "code"}\``;
-    else if (type === "codeblock") replacement = `\n\`\`\`javascript\n${selectedText || "// Code block"}\n\`\`\`\n`;
-    else if (type === "quote") replacement = `\n> ${selectedText || "Quote"}\n`;
-    else if (type === "timestamp") replacement = ` [${new Date().toLocaleString()}] `;
+    let selectStart = start;
+    let selectEnd = end;
 
-    textarea.setRangeText(replacement, start, end, 'select');
+    if (type === "bold") {
+        const text = selectedText || "Bold text";
+        replacement = `**${text}**`;
+        selectStart = start + 2;
+        selectEnd = selectStart + text.length;
+    } else if (type === "italic") {
+        const text = selectedText || "Italic text";
+        replacement = `*${text}*`;
+        selectStart = start + 1;
+        selectEnd = selectStart + text.length;
+    } else if (type === "underline") {
+        const text = selectedText || "Underlined text";
+        replacement = `<u>${text}</u>`;
+        selectStart = start + 3;
+        selectEnd = selectStart + text.length;
+    } else if (type === "strikethrough") {
+        const text = selectedText || "Strikethrough text";
+        replacement = `~~${text}~~`;
+        selectStart = start + 2;
+        selectEnd = selectStart + text.length;
+    } else if (type === "h1") {
+        const text = selectedText || "Heading 1";
+        replacement = `\n# ${text}\n`;
+        selectStart = start + 3;
+        selectEnd = selectStart + text.length;
+    } else if (type === "h2") {
+        const text = selectedText || "Heading 2";
+        replacement = `\n## ${text}\n`;
+        selectStart = start + 4;
+        selectEnd = selectStart + text.length;
+    } else if (type === "h3") {
+        const text = selectedText || "Heading 3";
+        replacement = `\n### ${text}\n`;
+        selectStart = start + 5;
+        selectEnd = selectStart + text.length;
+    } else if (type === "ul") {
+        const text = selectedText || "List item";
+        replacement = `\n- ${text}\n`;
+        selectStart = start + 3;
+        selectEnd = selectStart + text.length;
+    } else if (type === "ol") {
+        const text = selectedText || "List item";
+        replacement = `\n1. ${text}\n`;
+        selectStart = start + 4;
+        selectEnd = selectStart + text.length;
+    } else if (type === "checklist") {
+        const text = selectedText || "Task item";
+        replacement = `\n- [ ] ${text}\n`;
+        selectStart = start + 7;
+        selectEnd = selectStart + text.length;
+    } else if (type === "code") {
+        const text = selectedText || "code";
+        replacement = `\`${text}\``;
+        selectStart = start + 1;
+        selectEnd = selectStart + text.length;
+    } else if (type === "codeblock") {
+        const text = selectedText || "// Code block";
+        replacement = `\n\`\`\`javascript\n${text}\n\`\`\`\n`;
+        selectStart = start + 15;
+        selectEnd = selectStart + text.length;
+    } else if (type === "quote") {
+        const text = selectedText || "Quote";
+        replacement = `\n> ${text}\n`;
+        selectStart = start + 3;
+        selectEnd = selectStart + text.length;
+    } else if (type === "timestamp") {
+        const stamp = `[${new Date().toLocaleString()}]`;
+        replacement = ` ${stamp} `;
+        selectStart = start + 1;
+        selectEnd = selectStart + stamp.length;
+    }
+
+    textarea.setRangeText(replacement, start, end, 'end');
     textarea.focus();
+    if (!selectedText) {
+        textarea.setSelectionRange(selectStart, selectEnd);
+    }
     onNoteContentChange();
+    updateNotepadStats();
 }
 
 function changeNotepadFont(fontVal) {
@@ -2917,6 +3119,7 @@ function changeNotepadFont(fontVal) {
 
     if (textarea) textarea.style.fontFamily = fontCss;
     if (preview) preview.style.fontFamily = fontCss;
+    localStorage.setItem("notepadFont", fontVal);
 }
 
 function changeNotepadFontSize(sizeVal) {
@@ -2924,6 +3127,7 @@ function changeNotepadFontSize(sizeVal) {
     const preview = document.getElementById("note-preview-pane");
     if (textarea) textarea.style.fontSize = sizeVal;
     if (preview) preview.style.fontSize = sizeVal;
+    localStorage.setItem("notepadFontSize", sizeVal);
 }
 
 function updateNotepadStats() {
@@ -2954,17 +3158,107 @@ function toggleFocusWritingMode() {
     showToast("Focus mode toggled (Click button again to exit)", "info");
 }
 
-// Wrap onNoteContentChange to update stats
-if (typeof onNoteContentChange === "function") {
-    const origChange = onNoteContentChange;
-    onNoteContentChange = function() {
-        origChange();
-        updateNotepadStats();
-    };
-} else {
-    window.onNoteContentChange = function() {
-        updateNotepadStats();
-    };
+// MULTI-FORMAT EXPORT ENGINE (PDF, ZIP, EXCEL, TXT)
+function exportCurrentNotePDF() {
+    const titleInput = document.getElementById("note-title-input");
+    const contentInput = document.getElementById("note-content-input");
+    const rawTitle = titleInput ? titleInput.value : "Untitled Note";
+    const title = (rawTitle || "notepad_note").replace(/[^a-zA-Z0-9_-]/g, "_");
+    const content = contentInput ? contentInput.value : "";
+
+    const exportDiv = document.createElement("div");
+    exportDiv.style.position = "absolute";
+    exportDiv.style.left = "-9999px";
+    exportDiv.style.top = "-9999px";
+    exportDiv.style.width = "750px";
+    exportDiv.style.padding = "30px";
+    exportDiv.style.background = "#ffffff";
+    exportDiv.style.color = "#09090b";
+    exportDiv.style.fontFamily = "Arial, sans-serif";
+    exportDiv.innerHTML = `
+        <h1 style="color:#09090b; border-bottom:2px solid #6366f1; padding-bottom:8px; margin-top:0;">${escapeHtml(rawTitle)}</h1>
+        <p style="color:#64748b; font-size:12px; margin-bottom:15px;">ScriptVault Notepad Export &bull; Date: ${new Date().toLocaleDateString()}</p>
+        <hr style="border:0; border-top:1px solid #e2e8f0; margin:15px 0;">
+        <div style="font-size:14px; line-height:1.6; color:#1e293b;" class="markdown-body">${window.marked ? marked.parse(content) : escapeHtml(content).replace(/\n/g, '<br>')}</div>
+    `;
+
+    document.body.appendChild(exportDiv);
+
+    if (window.html2pdf) {
+        showToast("Exporting PDF...", "info");
+        const opt = {
+            margin: 10,
+            filename: `${title}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, logging: false },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+        html2pdf().set(opt).from(exportDiv).save().then(() => {
+            exportDiv.remove();
+        }).catch(err => {
+            console.error(err);
+            exportDiv.remove();
+            showToast("Failed to generate PDF", "error");
+        });
+    } else {
+        exportDiv.remove();
+        showToast("PDF generator library not loaded", "warning");
+    }
+}
+
+function exportCurrentNoteZIP() {
+    if (!window.JSZip) {
+        showToast("ZIP engine loading...", "warning");
+        return;
+    }
+
+    const titleInput = document.getElementById("note-title-input");
+    const contentInput = document.getElementById("note-content-input");
+    const title = ((titleInput ? titleInput.value : "") || "notepad_note").replace(/[^a-zA-Z0-9_-]/g, "_");
+    const content = contentInput ? contentInput.value : "";
+
+    const zip = new JSZip();
+    zip.file(`${title}.txt`, content);
+    zip.file(`${title}.md`, `# ${titleInput ? titleInput.value : "Note"}\n\n${content}`);
+    zip.file("INFO.txt", `Exported from ScriptVault Notepad\nTitle: ${titleInput ? titleInput.value : "Note"}\nDate: ${new Date().toLocaleString()}`);
+
+    zip.generateAsync({ type: "blob" }).then(function(blob) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${title}.zip`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast("ZIP archive downloaded!", "success");
+    });
+}
+
+function exportCurrentNoteTXT() {
+    const titleInput = document.getElementById("note-title-input");
+    const contentInput = document.getElementById("note-content-input");
+    const title = ((titleInput ? titleInput.value : "") || "notepad_note").replace(/[^a-zA-Z0-9_-]/g, "_");
+    const content = contentInput ? contentInput.value : "";
+
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${title}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("Text file downloaded!", "success");
+}
+
+function exportCurrentNoteExcel() {
+    if (activeNoteId) {
+        window.location.href = `/notes/export/excel?note_id=${activeNoteId}`;
+    } else {
+        window.location.href = `/notes/export/excel?workspace_id=${activeWorkspaceId}`;
+    }
+}
+
+function exportAllNotesExcel() {
+    window.location.href = `/notes/export/excel?workspace_id=${activeWorkspaceId}`;
 }
 
 // ====================================================

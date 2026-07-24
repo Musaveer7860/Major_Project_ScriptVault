@@ -257,6 +257,85 @@
                 body.innerHTML = "";
                 body.appendChild(codeBox);
                 if (window.Prism) Prism.highlightElement(codeEl);
+            } else if (type === 'sheet') {
+                badge.textContent = "Excel Spreadsheet";
+                badge.style.background = "#064e3b";
+                badge.style.color = "#a7f3d0";
+                
+                const body = document.getElementById("share-content-body");
+                body.className = "share-content-box";
+                body.style.padding = "0";
+                body.style.overflowX = "auto";
+                
+                try {
+                    let gridData = {};
+                    if (typeof data.content === "string" && data.content.startsWith("{")) {
+                        gridData = JSON.parse(data.content);
+                    } else if (typeof data.content === "object" && data.content !== null) {
+                        gridData = data.content;
+                    }
+
+                    let maxRow = 15;
+                    let maxCol = 8;
+                    
+                    Object.keys(gridData).forEach(ref => {
+                        const m = ref.match(/^([A-Z]+)(\d+)$/);
+                        if (m) {
+                            const r = parseInt(m[2]);
+                            let c = 0;
+                            for (let i = 0; i < m[1].length; i++) {
+                                c = c * 26 + (m[1].charCodeAt(i) - 64);
+                            }
+                            maxRow = Math.max(maxRow, r);
+                            maxCol = Math.max(maxCol, c);
+                        }
+                    });
+
+                    let tableHtml = `<table style="width:100%; border-collapse:collapse; font-size:0.85rem; background:#18181b; color:#f4f4f5;">`;
+                    tableHtml += `<thead><tr style="background:#27272a;"><th style="padding:8px; border:1px solid #3f3f46; width:40px;">#</th>`;
+                    
+                    for (let c = 0; c < maxCol; c++) {
+                        let temp, letter = '';
+                        let idx = c;
+                        while (idx >= 0) {
+                            temp = idx % 26;
+                            letter = String.fromCharCode(temp + 65) + letter;
+                            idx = (idx - temp) / 26 - 1;
+                        }
+                        tableHtml += `<th style="padding:8px; border:1px solid #3f3f46; min-width:100px; text-align:center; color:#c7d2fe;">${letter}</th>`;
+                    }
+                    tableHtml += `</tr></thead><tbody>`;
+
+                    for (let r = 1; r <= maxRow; r++) {
+                        tableHtml += `<tr><th style="padding:8px; border:1px solid #3f3f46; background:#27272a; color:#a1a1aa; text-align:center;">${r}</th>`;
+                        for (let c = 0; c < maxCol; c++) {
+                            let temp, letter = '';
+                            let idx = c;
+                            while (idx >= 0) {
+                                temp = idx % 26;
+                                letter = String.fromCharCode(temp + 65) + letter;
+                                idx = (idx - temp) / 26 - 1;
+                            }
+                            const ref = `${letter}${r}`;
+                            const cell = gridData[ref] || { raw: "", val: "" };
+                            let val = cell.val !== undefined ? cell.val : cell.raw;
+                            
+                            let styleStr = "padding:8px; border:1px solid #3f3f46; ";
+                            if (cell.bold) styleStr += "font-weight:bold; ";
+                            if (cell.italic) styleStr += "font-style:italic; ";
+                            if (cell.align) styleStr += `text-align:${cell.align}; `;
+                            if (cell.bg) styleStr += `background-color:${cell.bg}; color:#09090b; `;
+                            if (cell.color) styleStr += `color:${cell.color}; `;
+                            
+                            tableHtml += `<td style="${styleStr}">${val !== undefined && val !== null ? val : ""}</td>`;
+                        }
+                        tableHtml += `</tr>`;
+                    }
+                    tableHtml += `</tbody></table>`;
+                    body.innerHTML = tableHtml;
+                } catch(e) {
+                    body.textContent = data.content || "Spreadsheet data preview not available.";
+                }
             } else {
                 badge.textContent = "Notepad Note";
                 const body = document.getElementById("share-content-body");
