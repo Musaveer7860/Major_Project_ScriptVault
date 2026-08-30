@@ -4,7 +4,7 @@ function showToast(message, type = 'success') {
 
     const toast = document.createElement("div");
     toast.className = `toast ${type}`;
-    
+
     let iconClass = 'fa-circle-info';
     if (type === 'success') iconClass = 'fa-circle-check';
     if (type === 'error') iconClass = 'fa-circle-exclamation';
@@ -37,7 +37,7 @@ if (passwordInput && registerForm) {
 
     passwordInput.addEventListener("input", () => {
         const val = passwordInput.value;
-        
+
         const isLengthValid = val.length >= 8;
         toggleChecklistItem(reqLength, isLengthValid);
 
@@ -66,29 +66,29 @@ if (passwordInput && registerForm) {
 if (registerForm) {
     registerForm.addEventListener("submit", async (e) => {
         e.preventDefault();
-        
+
         const username = document.getElementById("username").value;
         const email = document.getElementById("email").value;
         const password = passwordInput.value;
-        
+
         try {
             const response = await fetch("/register", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ username, email, password })
             });
-            
+
             const data = await response.json();
-            
+
             if (!response.ok) {
                 throw new Error(data.detail || "Registration failed. Please try again.");
             }
-            
+
             showToast("Registration successful! Redirecting to login...", "success");
             setTimeout(() => {
                 window.location.href = "/login";
             }, 1500);
-            
+
         } catch (err) {
             showToast(err.message, "error");
         }
@@ -99,30 +99,30 @@ const loginForm = document.getElementById("login-form");
 if (loginForm) {
     loginForm.addEventListener("submit", async (e) => {
         e.preventDefault();
-        
+
         const username = document.getElementById("username").value;
         const password = document.getElementById("password").value;
-        
+
         try {
             const response = await fetch("/login", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ username, password })
             });
-            
+
             const data = await response.json();
-            
+
             if (!response.ok) {
                 throw new Error(data.detail || "Login failed. Check credentials.");
             }
-            
+
             localStorage.setItem("user", JSON.stringify(data.user));
-            
+
             showToast("Login successful! Unlocking your vault...", "success");
             setTimeout(() => {
                 window.location.href = "/dashboard";
             }, 1200);
-            
+
         } catch (err) {
             showToast(err.message, "error");
         }
@@ -135,7 +135,7 @@ async function handleLogout() {
     } catch (e) {
         console.error("Error logging out from server:", e);
     }
-    
+
     localStorage.removeItem("user");
     window.location.href = "/";
 }

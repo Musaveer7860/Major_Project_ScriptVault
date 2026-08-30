@@ -34,7 +34,7 @@ def startup_event():
         
         users = list(db.users.find())
         for u in users:
-            # Check if user has a workspace
+
             ws = db.workspaces.find_one({"user_id": u["_id"]})
             if not ws:
                 ws_id = db.workspaces.insert_one({
@@ -46,7 +46,7 @@ def startup_event():
             else:
                 ws_id = ws["_id"]
             
-            # Map all snippets of this user without workspace_id to default workspace
+
             res = db.snippets.update_many(
                 {"user_id": u["_id"], "workspace_id": {"$exists": False}},
                 {"$set": {"workspace_id": ws_id}}

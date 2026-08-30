@@ -137,7 +137,7 @@
             border-radius: 6px;
             overflow-x: auto;
         }
-    </style>
+</style>
 </head>
 <body>
     <header class="share-header">
@@ -246,13 +246,13 @@
                 badge.textContent = `Snippet (${data.language || 'Code'})`;
                 badge.style.background = "#064e3b";
                 badge.style.color = "#a7f3d0";
-                
+
                 const codeBox = document.createElement("pre");
                 const codeEl = document.createElement("code");
                 codeEl.className = `language-${(data.language || 'javascript').toLowerCase()}`;
                 codeEl.textContent = data.code || data.content || "";
                 codeBox.appendChild(codeEl);
-                
+
                 const body = document.getElementById("share-content-body");
                 body.innerHTML = "";
                 body.appendChild(codeBox);
@@ -261,12 +261,12 @@
                 badge.textContent = "Excel Spreadsheet";
                 badge.style.background = "#064e3b";
                 badge.style.color = "#a7f3d0";
-                
+
                 const body = document.getElementById("share-content-body");
                 body.className = "share-content-box";
                 body.style.padding = "0";
                 body.style.overflowX = "auto";
-                
+
                 try {
                     let gridData = {};
                     if (typeof data.content === "string" && data.content.startsWith("{")) {
@@ -277,7 +277,7 @@
 
                     let maxRow = 15;
                     let maxCol = 8;
-                    
+
                     Object.keys(gridData).forEach(ref => {
                         const m = ref.match(/^([A-Z]+)(\d+)$/);
                         if (m) {
@@ -293,7 +293,7 @@
 
                     let tableHtml = `<table style="width:100%; border-collapse:collapse; font-size:0.85rem; background:#18181b; color:#f4f4f5;">`;
                     tableHtml += `<thead><tr style="background:#27272a;"><th style="padding:8px; border:1px solid #3f3f46; width:40px;">#</th>`;
-                    
+
                     for (let c = 0; c < maxCol; c++) {
                         let temp, letter = '';
                         let idx = c;
@@ -319,14 +319,14 @@
                             const ref = `${letter}${r}`;
                             const cell = gridData[ref] || { raw: "", val: "" };
                             let val = cell.val !== undefined ? cell.val : cell.raw;
-                            
+
                             let styleStr = "padding:8px; border:1px solid #3f3f46; ";
                             if (cell.bold) styleStr += "font-weight:bold; ";
                             if (cell.italic) styleStr += "font-style:italic; ";
                             if (cell.align) styleStr += `text-align:${cell.align}; `;
                             if (cell.bg) styleStr += `background-color:${cell.bg}; color:#09090b; `;
                             if (cell.color) styleStr += `color:${cell.color}; `;
-                            
+
                             tableHtml += `<td style="${styleStr}">${val !== undefined && val !== null ? val : ""}</td>`;
                         }
                         tableHtml += `</tr>`;
@@ -360,9 +360,32 @@
         function copyShareText() {
             if (!loadedContent) return;
             const text = contentType === 'snippet' ? loadedContent.code : loadedContent.content;
-            navigator.clipboard.writeText(text || "").then(() => {
+            const contentText = text || "";
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(contentText).then(() => {
+                    alert("Content copied to clipboard!");
+                }).catch(() => fallbackCopyText(contentText));
+            } else {
+                fallbackCopyText(contentText);
+            }
+        }
+
+        function fallbackCopyText(text) {
+            const textarea = document.createElement("textarea");
+            textarea.value = text;
+            textarea.style.position = "fixed";
+            textarea.style.opacity = "0";
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            try {
+                document.execCommand("copy");
                 alert("Content copied to clipboard!");
-            });
+            } catch (err) {
+                alert("Failed to copy content.");
+            }
+            document.body.removeChild(textarea);
         }
 
         function downloadShareTXT() {
@@ -406,7 +429,7 @@
             const zip = new JSZip();
             zip.file(`${title}.txt`, text || "");
             zip.file("README.txt", `Downloaded from ScriptVault Share\nTitle: ${loadedContent.title}\nAuthor: ${loadedContent.author}\nDate: ${loadedContent.created_at}`);
-            
+
             zip.generateAsync({ type: "blob" }).then(function(content) {
                 const url = URL.createObjectURL(content);
                 const a = document.createElement("a");
@@ -418,6 +441,6 @@
         }
 
         document.addEventListener("DOMContentLoaded", initSharePage);
-    </script>
+</script>
 </body>
 </html>

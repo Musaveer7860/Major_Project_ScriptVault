@@ -20,25 +20,23 @@ let activePlaygroundLang = "Python";
 
 function switchView(viewName) {
     currentView = viewName;
-    
-    // Update sidebar navigation
+
     const navItems = document.querySelectorAll(".sidebar-nav .nav-item");
     navItems.forEach(item => item.classList.remove("active"));
-    
+
     const activeNav = document.getElementById(`nav-${viewName}`);
     if (activeNav) activeNav.classList.add("active");
-    
-    // Toggle view containers
+
     const viewSnippets = document.getElementById("snippets-view");
     const viewNotes = document.getElementById("notes-view");
     const viewPlayground = document.getElementById("playground-view");
     const viewSheets = document.getElementById("sheets-view");
-    
+
     if (viewSnippets) viewSnippets.style.display = "none";
     if (viewNotes) viewNotes.style.display = "none";
     if (viewPlayground) viewPlayground.style.display = "none";
     if (viewSheets) viewSheets.style.display = "none";
-    
+
     if (viewName === "snippets") {
         if (viewSnippets) viewSnippets.style.display = "block";
         fetchSnippets();
@@ -68,11 +66,9 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("user-email").textContent = currentUser.email;
     document.getElementById("user-avatar").textContent = currentUser.username.charAt(0).toUpperCase();
 
-    // Load initial Workspace and Collection state
     loadWorkspaceData();
     updateNotificationsUI();
 
-    // Initialize Monaco Editor for Run Modal with CORS CDN compatibility
     window.MonacoEnvironment = {
         getWorkerUrl: function (workerId, label) {
             const proxy = `
@@ -101,7 +97,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
 
-    // Workspace Create form submit
     const wsForm = document.getElementById("workspace-create-form");
     if (wsForm) {
         wsForm.addEventListener("submit", async (e) => {
@@ -139,7 +134,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // Collection Create form submit
     const collForm = document.getElementById("collection-create-form");
     if (collForm) {
         collForm.addEventListener("submit", async (e) => {
@@ -172,7 +166,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // Workspace Rename form submit
     const wsRenameForm = document.getElementById("workspace-rename-form");
     if (wsRenameForm) {
         wsRenameForm.addEventListener("submit", async (e) => {
@@ -203,7 +196,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // Collection Rename form submit
     const collRenameForm = document.getElementById("collection-rename-form");
     if (collRenameForm) {
         collRenameForm.addEventListener("submit", async (e) => {
@@ -234,7 +226,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // Click outside notification dropdown handler
     const notifBtn = document.getElementById("notification-bell-btn");
     const notifMenu = document.getElementById("notification-dropdown");
     if (notifBtn && notifMenu) {
@@ -259,7 +250,7 @@ function showToast(message, type = 'success') {
 
     const toast = document.createElement("div");
     toast.className = `toast ${type}`;
-    
+
     let iconClass = 'fa-circle-info';
     if (type === 'success') iconClass = 'fa-circle-check';
     if (type === 'error') iconClass = 'fa-circle-exclamation';
@@ -279,10 +270,6 @@ function showToast(message, type = 'success') {
         setTimeout(() => toast.remove(), 300);
     }, 4000);
 }
-
-// ==========================================
-// WORKSPACE & COLLECTIONS STATE MANAGERS
-// ==========================================
 
 async function loadWorkspaceData() {
     try {
@@ -344,7 +331,6 @@ function renderCollections(collections) {
 
     listDiv.innerHTML = "";
 
-    // Add Root button
     const rootBtn = document.createElement("button");
     rootBtn.className = `nav-item ${(!activeCollectionId || activeCollectionId === 'none') ? 'active' : ''}`;
     rootBtn.style.padding = "0.35rem 0.5rem";
@@ -420,18 +406,16 @@ function filterCollection(collId) {
         document.getElementById("notes-view").style.display = "none";
         document.getElementById("playground-view").style.display = "none";
     }
-    
-    // Reset active sidebar items
+
     const navItems = document.querySelectorAll(".sidebar-nav .nav-item");
     navItems.forEach(item => item.classList.remove("active"));
-    
+
     const activeNav = document.getElementById("nav-snippets");
     if (activeNav) activeNav.classList.add("active");
 
     activeCollectionId = collId;
     localStorage.setItem("activeCollectionId", collId);
-    
-    // Clear archived, tags, language and search filters
+
     showArchived = false;
     currentLanguage = "";
     currentTag = "";
@@ -460,10 +444,10 @@ async function switchWorkspace(wsId) {
     if (sidebar) {
         const buttons = sidebar.querySelectorAll(".nav-item");
         buttons.forEach(btn => btn.classList.remove("active"));
-        
+
         const viewBtn = document.getElementById(`nav-${currentView}`);
         if (viewBtn) viewBtn.classList.add("active");
-        
+
         if (currentView === "snippets") {
             const allBtn = document.getElementById("filter-all");
             if (allBtn) allBtn.classList.add("active");
@@ -473,7 +457,7 @@ async function switchWorkspace(wsId) {
     document.getElementById("dashboard-title").textContent = "All Snippets";
 
     await loadWorkspaceData();
-    
+
     if (currentView === "notes") {
         await fetchNotes();
         selectNote(null);
@@ -591,16 +575,12 @@ async function deleteCollection(collId) {
     }
 }
 
-// ==========================================
-// SNIPPETS CRUD & FILTERS
-// ==========================================
-
 async function fetchSnippets() {
     let url = `/snippets?workspace_id=${activeWorkspaceId}`;
     if (activeCollectionId && activeCollectionId !== "none" && activeCollectionId !== "null") {
         url += `&collection_id=${activeCollectionId}`;
     }
-    
+
     if (currentSearch || currentLanguage || currentTag) {
         const params = new URLSearchParams();
         if (currentSearch) params.append("q", currentSearch);
@@ -612,39 +592,36 @@ async function fetchSnippets() {
         }
         url = `/search?${params.toString()}`;
     }
-    
+
     try {
         const response = await fetch(url);
-        
+
         if (response.status === 401) {
             handleLogout();
             return;
         }
-        
+
         if (!response.ok) {
             const errData = await response.json();
             throw new Error(errData.detail || "Failed to fetch snippets.");
         }
-        
+
         const snippets = await response.json();
         allSnippets = snippets;
-        
-        // Sync stats cards
+
         syncStatsCards(snippets);
-        
+
         let filtered = snippets;
         if (currentFilterFavorites) {
             filtered = filtered.filter(s => s.favorite);
         }
 
-        // Apply Archived Filter
         if (showArchived) {
             filtered = filtered.filter(s => s.archived);
         } else {
             filtered = filtered.filter(s => !s.archived);
         }
 
-        // Apply Sorting
         if (currentSort === "newest") {
             filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         } else if (currentSort === "oldest") {
@@ -654,7 +631,7 @@ async function fetchSnippets() {
         } else if (currentSort === "title-desc") {
             filtered.sort((a, b) => b.title.localeCompare(a.title));
         }
-        
+
         renderSnippets(filtered);
         renderRecentSnippets(snippets);
         fetchSnippetStats();
@@ -685,13 +662,12 @@ function renderSnippets(snippets) {
     const countLabel = document.getElementById("snippet-count");
     const pinnedContainer = document.getElementById("pinned-snippets-container");
     const pinnedSection = document.getElementById("pinned-snippets-section");
-    
+
     container.innerHTML = "";
     if (pinnedContainer) pinnedContainer.innerHTML = "";
-    
+
     countLabel.textContent = `${snippets.length} snippet${snippets.length === 1 ? '' : 's'} found`;
-    
-    // Separate pinned and non-pinned
+
     const pinned = snippets.filter(s => s.pinned && !s.archived);
     const others = snippets.filter(s => !s.pinned || s.archived);
 
@@ -721,7 +697,7 @@ function renderSnippets(snippets) {
         `;
         return;
     }
-    
+
     displaySnippets.forEach(snippet => {
         const card = createSnippetCard(snippet);
         container.appendChild(card);
@@ -732,10 +708,10 @@ function renderSnippets(snippets) {
 function createSnippetCard(snippet) {
     const card = document.createElement("div");
     card.className = "snippet-card";
-    
+
     const date = new Date(snippet.created_at);
     const formattedDate = date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-    
+
     const langClass = `lang-${snippet.language.toLowerCase()}`;
     const PRISM_LANG_MAP = {
         "Python": "python",
@@ -748,12 +724,12 @@ function createSnippetCard(snippet) {
         "SQL": "sql"
     };
     const prismClass = `language-${PRISM_LANG_MAP[snippet.language] || 'clike'}`;
-    
+
     const heartClass = snippet.favorite ? "fa-solid fa-heart fav-active" : "fa-regular fa-heart";
     const pinClass = snippet.pinned ? "fa-solid fa-thumbtack" : "fa-regular fa-thumbtack";
     const pinColor = snippet.pinned ? "#d97706" : "var(--text-secondary)";
     const pinStyle = snippet.pinned ? "transform: rotate(45deg);" : "";
-    
+
     card.innerHTML = `
         <div class="card-header">
             <div style="display: flex; align-items: center; gap: 0.35rem; flex: 1; min-width: 0;">
@@ -767,16 +743,16 @@ function createSnippetCard(snippet) {
             </div>
             <span class="lang-badge ${langClass}">${snippet.language}</span>
         </div>
-        
+
         <div class="card-meta" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
             <span><i class="fa-regular fa-calendar"></i> Created ${formattedDate}</span>
             ${snippet.description ? `<span style="color: var(--text-secondary); font-size: 0.75rem;"><i class="fa-regular fa-message"></i> ${escapeHtml(snippet.description)}</span>` : ""}
         </div>
-        
+
         <div class="tag-list">
             ${snippet.tags.map(tag => `<span class="tag-pill" style="cursor:pointer;" onclick="filterTag('${escapeHtml(tag)}')">#${escapeHtml(tag)}</span>`).join("")}
         </div>
-        
+
         <div class="code-container">
             <pre class="${prismClass}"><code class="${prismClass}"></code></pre>
             <div class="code-actions-overlay">
@@ -785,7 +761,7 @@ function createSnippetCard(snippet) {
                 </button>
             </div>
         </div>
-        
+
         <div class="card-footer" style="display: flex; flex-direction: column; gap: 0.5rem;">
             <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; flex-wrap: wrap; gap: 0.5rem;">
                 <div class="card-actions-left" style="gap: 0.35rem; display: flex; align-items: center;">
@@ -830,7 +806,7 @@ function createSnippetCard(snippet) {
             </div>
         </div>
     `;
-    
+
     card.querySelector("code").textContent = snippet.code;
     return card;
 }
@@ -847,16 +823,30 @@ function escapeHtml(text) {
 
 async function copySnippetCode(btn, codeText) {
     try {
-        await navigator.clipboard.writeText(codeText);
-        
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(codeText);
+        } else {
+            const textarea = document.createElement("textarea");
+            textarea.value = codeText;
+            textarea.style.position = "fixed";
+            textarea.style.opacity = "0";
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            document.execCommand("copy");
+            document.body.removeChild(textarea);
+        }
+
         const icon = btn.querySelector("i");
-        icon.className = "fa-solid fa-check";
-        btn.style.color = "var(--color-success)";
-        btn.style.borderColor = "var(--color-success)";
-        
+        if (icon) {
+            icon.className = "fa-solid fa-check";
+            btn.style.color = "var(--color-success)";
+            btn.style.borderColor = "var(--color-success)";
+        }
+
         showToast("Code copied to clipboard!", "success");
         addNotification("Copied code snippet to clipboard", "info");
-        
+
         setTimeout(() => {
             icon.className = "fa-regular fa-copy";
             btn.style.color = "";
@@ -872,17 +862,17 @@ async function cloneSnippet(snippetId) {
         const response = await fetch(`/snippet/${snippetId}/clone`, {
             method: "POST"
         });
-        
+
         if (response.status === 401) {
             handleLogout();
             return;
         }
-        
+
         if (!response.ok) {
             const errData = await response.json();
             throw new Error(errData.detail || "Failed to clone snippet.");
         }
-        
+
         showToast("Snippet cloned successfully!", "success");
         addNotification("Cloned a code snippet", "success");
         fetchSnippets();
@@ -895,22 +885,22 @@ async function deleteSnippet(snippetId) {
     if (!confirm("Are you sure you want to permanently delete this snippet?")) {
         return;
     }
-    
+
     try {
         const response = await fetch(`/snippet/${snippetId}`, {
             method: "DELETE"
         });
-        
+
         if (response.status === 401) {
             handleLogout();
             return;
         }
-        
+
         if (!response.ok) {
             const errData = await response.json();
             throw new Error(errData.detail || "Failed to delete snippet.");
         }
-        
+
         showToast("Snippet deleted successfully.", "success");
         addNotification("Deleted a code snippet", "warning");
         fetchSnippets();
@@ -931,24 +921,24 @@ function handleSearchInput(val) {
 function updateSearchSuggestions() {
     const suggestionsDiv = document.getElementById("search-suggestions");
     if (!suggestionsDiv) return;
-    
+
     if (!currentSearch) {
         suggestionsDiv.style.display = "none";
         return;
     }
-    
+
     const matches = allSnippets.filter(s => 
         s.title.toLowerCase().includes(currentSearch.toLowerCase()) ||
         s.tags.some(t => t.toLowerCase().includes(currentSearch.toLowerCase()))
     ).slice(0, 5);
-    
+
     suggestionsDiv.innerHTML = "";
     if (matches.length === 0) {
         suggestionsDiv.innerHTML = `<div style="padding: 0.5rem 0.75rem; color: var(--text-muted); font-size: 0.8rem;">No suggestions.</div>`;
         suggestionsDiv.style.display = "flex";
         return;
     }
-    
+
     matches.forEach(m => {
         const item = document.createElement("button");
         item.style.background = "none";
@@ -961,7 +951,7 @@ function updateSearchSuggestions() {
         item.style.width = "100%";
         item.style.fontFamily = "var(--font-ui)";
         item.innerHTML = `<i class="fa-solid fa-magnifying-glass" style="color: var(--text-muted); margin-right: 0.5rem;"></i> ${escapeHtml(m.title)}`;
-        
+
         item.onmousedown = () => {
             document.getElementById("search-bar").value = m.title;
             currentSearch = m.title;
@@ -1000,24 +990,24 @@ function filterLanguage(lang) {
     currentLanguage = lang;
     currentTag = "";
     showArchived = false;
-    
+
     document.getElementById("search-bar").value = "";
     currentSearch = "";
-    
+
     const sidebar = document.querySelector(".sidebar-nav");
     const buttons = sidebar.querySelectorAll(".nav-item");
     buttons.forEach(btn => btn.classList.remove("active"));
-    
+
     const activeNav = document.getElementById("nav-snippets");
     if (activeNav) activeNav.classList.add("active");
-    
+
     const activeId = lang ? `filter-${lang.toLowerCase().replace('+', 'p')}` : 'filter-all';
     const activeBtn = document.getElementById(activeId);
     if (activeBtn) activeBtn.classList.add("active");
-    
+
     const titleLabel = document.getElementById("dashboard-title");
     titleLabel.textContent = lang ? `${lang} Snippets` : "All Snippets";
-    
+
     fetchSnippets();
 }
 
@@ -1031,17 +1021,17 @@ function filterTag(tagName) {
 
     currentTag = tagName;
     showArchived = false;
-    
+
     const titleLabel = document.getElementById("dashboard-title");
     titleLabel.textContent = `Snippets with #${tagName}`;
-    
+
     const sidebar = document.querySelector(".sidebar-nav");
     const buttons = sidebar.querySelectorAll(".nav-item");
     buttons.forEach(btn => btn.classList.remove("active"));
-    
+
     const activeNav = document.getElementById("nav-snippets");
     if (activeNav) activeNav.classList.add("active");
-    
+
     fetchSnippets();
 }
 
@@ -1050,34 +1040,30 @@ function handleLogout() {
     window.location.href = "/login";
 }
 
-// ==========================================
-// MONACO EDITOR & RUN MODAL ACTIONS
-// ==========================================
-
 let runModalLang = "";
 
 function openRunModal(title, code, language) {
     runModalLang = language;
     document.getElementById("run-modal-title").textContent = `Run Snippet - ${title} (${language})`;
     document.getElementById("run-modal-code").value = code;
-    
+
     if (runEditor) {
         runEditor.setValue(code);
         let lang = language.toLowerCase();
         if (lang === "c++") lang = "cpp";
         monaco.editor.setModelLanguage(runEditor.getModel(), lang);
     }
-    
+
     document.getElementById("run-modal-input").value = "";
     document.getElementById("run-modal-output").textContent = "Console output will appear here...";
-    
+
     const inputGroup = document.getElementById("run-input-group");
     const previewGroup = document.getElementById("run-preview-group");
     const iframe = document.getElementById("run-modal-iframe");
-    
+
     iframe.srcdoc = "";
     previewGroup.style.display = "none";
-    
+
     const langLower = language.toLowerCase();
     if (langLower === "html" || langLower === "css" || langLower === "javascript") {
         inputGroup.style.display = "none";
@@ -1087,7 +1073,7 @@ function openRunModal(title, code, language) {
     } else {
         inputGroup.style.display = "block";
     }
-    
+
     document.getElementById("run-modal").style.display = "flex";
 }
 
@@ -1101,10 +1087,10 @@ async function executeSnippetCode() {
     const outputDiv = document.getElementById("run-modal-output");
     const iframe = document.getElementById("run-modal-iframe");
     const langLower = runModalLang.toLowerCase();
-    
+
     outputDiv.textContent = "Executing...";
     addNotification(`Executed code snippet (${runModalLang})`, "info");
-    
+
     if (langLower === "javascript") {
         try {
             let logs = [];
@@ -1113,10 +1099,10 @@ async function executeSnippetCode() {
                 error: (...args) => logs.push("[ERROR] " + args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' ')),
                 warn: (...args) => logs.push("[WARN] " + args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' '))
             };
-            
+
             const runFn = new Function('console', code);
             runFn(customConsole);
-            
+
             outputDiv.textContent = logs.length > 0 ? logs.join("\n") : "Script ran successfully.";
         } catch (err) {
             outputDiv.textContent = `Runtime Error: ${err.message}`;
@@ -1141,17 +1127,17 @@ async function executeSnippetCode() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ code, language: runModalLang, input })
             });
-            
+
             if (response.status === 401) {
                 handleLogout();
                 return;
             }
-            
+
             const data = await response.json();
             if (!response.ok) {
                 throw new Error(data.detail || "Failed to execute snippet.");
             }
-            
+
             let outText = "";
             if (data.stdout) {
                 outText += data.stdout;
@@ -1163,17 +1149,13 @@ async function executeSnippetCode() {
             if (!outText) {
                 outText = "Code executed with no output.";
             }
-            
+
             outputDiv.textContent = outText + `\n\n[Process exited with code ${data.exit_code}]`;
         } catch (err) {
             outputDiv.textContent = `Execution failed: ${err.message}`;
         }
     }
 }
-
-// ==========================================
-// FAVORITES & STATS
-// ==========================================
 
 function toggleFavoritesFilter() {
     if (currentView !== "snippets") {
@@ -1184,23 +1166,23 @@ function toggleFavoritesFilter() {
     }
 
     currentFilterFavorites = !currentFilterFavorites;
-    
+
     const btn = document.getElementById("filter-favorites");
     const titleLabel = document.getElementById("dashboard-title");
-    
+
     currentLanguage = "";
     currentTag = "";
     document.getElementById("search-bar").value = "";
     currentSearch = "";
     showArchived = false;
-    
+
     const sidebar = document.querySelector(".sidebar-nav");
     const buttons = sidebar.querySelectorAll(".nav-item");
     buttons.forEach(b => b.classList.remove("active"));
-    
+
     const activeNav = document.getElementById("nav-snippets");
     if (activeNav) activeNav.classList.add("active");
-    
+
     if (currentFilterFavorites) {
         btn.classList.add("active");
         titleLabel.textContent = "Favorite Snippets";
@@ -1208,7 +1190,7 @@ function toggleFavoritesFilter() {
         document.getElementById("filter-all").classList.add("active");
         titleLabel.textContent = "All Snippets";
     }
-    
+
     fetchSnippets();
 }
 
@@ -1225,7 +1207,7 @@ async function toggleFavorite(snippetId, btn) {
         if (!response.ok) {
             throw new Error(data.detail || "Failed to toggle favorite.");
         }
-        
+
         const icon = btn.querySelector("i");
         if (data.favorite) {
             icon.className = "fa-solid fa-heart fav-active";
@@ -1238,7 +1220,7 @@ async function toggleFavorite(snippetId, btn) {
             showToast("Removed from favorites.", "info");
             addNotification("Removed snippet from favorites", "info");
         }
-        
+
         fetchSnippetStats();
         fetchSnippets();
     } catch (err) {
@@ -1251,28 +1233,28 @@ async function fetchSnippetStats() {
         const response = await fetch("/snippets/stats");
         if (response.status === 401) return;
         if (!response.ok) return;
-        
+
         const data = await response.json();
         const tCount = document.getElementById("stats-total-count");
         const fCount = document.getElementById("stats-fav-count");
-        
+
         if (tCount) tCount.textContent = data.total;
         if (fCount) fCount.textContent = data.favorites;
-        
+
         const listDiv = document.getElementById("stats-languages-list");
         if (!listDiv) return;
         listDiv.innerHTML = "";
-        
+
         const languages = data.languages;
         const total = data.total;
-        
+
         if (total === 0) {
             listDiv.innerHTML = `<div style="text-align: center; color: var(--text-muted); font-size: 0.85rem;">No snippets recorded yet.</div>`;
             return;
         }
-        
+
         const sortedLangs = Object.entries(languages).sort((a, b) => b[1] - a[1]);
-        
+
         const LANG_COLOR_MAP = {
             "Python": "#3572A5",
             "JavaScript": "#f1e05a",
@@ -1283,11 +1265,11 @@ async function fetchSnippetStats() {
             "CSS": "#563d7c",
             "SQL": "#e38c00"
         };
-        
+
         sortedLangs.forEach(([lang, count]) => {
             const pct = total > 0 ? Math.round((count / total) * 100) : 0;
             const color = LANG_COLOR_MAP[lang] || "#71717a";
-            
+
             const barRow = document.createElement("div");
             barRow.style.display = "flex";
             barRow.style.flexDirection = "column";
@@ -1320,16 +1302,16 @@ function closeStatsModal() {
 function renderRecentSnippets(snippets) {
     const recentListDiv = document.getElementById("recent-snippets-list");
     if (!recentListDiv) return;
-    
+
     recentListDiv.innerHTML = "";
-    
+
     const sorted = [...snippets].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 5);
-    
+
     if (sorted.length === 0) {
         recentListDiv.innerHTML = `<div style="font-size: 0.75rem; color: var(--text-muted); padding: 0.25rem 0;">No snippets.</div>`;
         return;
     }
-    
+
     sorted.forEach(s => {
         const langClass = `lang-${s.language.toLowerCase()}`;
         const item = document.createElement("div");
@@ -1343,12 +1325,12 @@ function renderRecentSnippets(snippets) {
         item.style.cursor = "pointer";
         item.style.transition = "all 0.15s ease";
         item.title = `Click to view: ${s.title}`;
-        
+
         item.innerHTML = `
             <span style="font-size: 0.75rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; color: #09090b; text-align: left;">${escapeHtml(s.title)}</span>
             <span class="lang-badge ${langClass}" style="font-size: 0.6rem; padding: 0.1rem 0.3rem; margin-left: 0.5rem; flex-shrink: 0;">${s.language}</span>
         `;
-        
+
         item.addEventListener("mouseenter", () => {
             item.style.borderColor = "var(--border-focus)";
             item.style.background = "#f4f4f5";
@@ -1357,7 +1339,7 @@ function renderRecentSnippets(snippets) {
             item.style.borderColor = "var(--border-color)";
             item.style.background = "#ffffff";
         });
-        
+
         item.addEventListener("click", () => {
             const cards = document.querySelectorAll(".snippet-card");
             let found = false;
@@ -1389,7 +1371,7 @@ function renderRecentSnippets(snippets) {
                 }, 300);
             }
         });
-        
+
         recentListDiv.appendChild(item);
     });
 }
@@ -1397,17 +1379,17 @@ function renderRecentSnippets(snippets) {
 function toggleExportDropdown(btn) {
     const menu = btn.nextElementSibling;
     if (!menu) return;
-    
+
     document.querySelectorAll(".export-dropdown-menu").forEach(m => {
         if (m !== menu) m.style.display = "none";
     });
-    
+
     if (menu.style.display === "none" || menu.style.display === "") {
         menu.style.display = "flex";
     } else {
         menu.style.display = "none";
     }
-    
+
     const closeDropdown = (e) => {
         if (!btn.contains(e.target) && !menu.contains(e.target)) {
             menu.style.display = "none";
@@ -1421,17 +1403,17 @@ async function exportSnippetJSON(snippetId) {
     try {
         const response = await fetch(`/snippet/${snippetId}`);
         if (!response.ok) throw new Error("Failed to fetch snippet details.");
-        
+
         const snippet = await response.json();
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(snippet, null, 2));
-        
+
         const downloadAnchor = document.createElement("a");
         downloadAnchor.setAttribute("href", dataStr);
         downloadAnchor.setAttribute("download", `${snippet.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.json`);
         document.body.appendChild(downloadAnchor);
         downloadAnchor.click();
         downloadAnchor.remove();
-        
+
         showToast("JSON downloaded successfully!", "success");
         addNotification(`Exported snippet JSON: ${snippet.title}`, "success");
     } catch (err) {
@@ -1443,9 +1425,9 @@ async function exportSnippetPDF(snippetId) {
     try {
         const response = await fetch(`/snippet/${snippetId}`);
         if (!response.ok) throw new Error("Failed to fetch snippet details.");
-        
+
         const snippet = await response.json();
-        
+
         let jsPDFClass;
         if (window.jspdf && window.jspdf.jsPDF) {
             jsPDFClass = window.jspdf.jsPDF;
@@ -1456,41 +1438,37 @@ async function exportSnippetPDF(snippetId) {
         }
         const doc = new jsPDFClass();
 
-        // Helper to sanitize non-Latin1 / emoji characters to prevent PDF corruption symbols
         const sanitizeForPDF = (str) => {
             if (!str) return "";
             return str.replace(/[^\x00-\xFF]/g, "");
         };
-        
-        // Title as the main header (removed brand 'Code Export' line)
+
         doc.setFont("helvetica", "bold");
         doc.setFontSize(20);
         doc.setTextColor(9, 9, 11);
         doc.text(sanitizeForPDF(snippet.title), 15, 20);
-        
+
         doc.setDrawColor(228, 228, 231);
         doc.setLineWidth(0.5);
         doc.line(15, 24, 195, 24);
-        
-        // Metadata
+
         doc.setFont("helvetica", "normal");
         doc.setFontSize(10);
         doc.setTextColor(113, 113, 122);
         doc.text(`Language: ${sanitizeForPDF(snippet.language)}`, 15, 32);
         doc.text(`Tags: ${snippet.tags.map(t => sanitizeForPDF(t)).join(", ") || 'none'}`, 15, 37);
         doc.text(`Exported On: ${new Date().toLocaleDateString()}`, 15, 42);
-        
+
         doc.line(15, 46, 195, 46);
-        
-        // Code Content
+
         doc.setFont("courier", "normal");
         doc.setFontSize(9);
         doc.setTextColor(9, 9, 11);
-        
+
         const codeLines = doc.splitTextToSize(sanitizeForPDF(snippet.code), 180);
         let y = 54;
         const pageHeight = doc.internal.pageSize.height;
-        
+
         codeLines.forEach((line) => {
             if (y > pageHeight - 15) {
                 doc.addPage();
@@ -1499,7 +1477,7 @@ async function exportSnippetPDF(snippetId) {
             doc.text(line, 15, y);
             y += 5;
         });
-        
+
         doc.save(`${snippet.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`);
         showToast("PDF downloaded successfully!", "success");
         addNotification(`Exported snippet PDF: ${snippet.title}`, "success");
@@ -1526,36 +1504,36 @@ document.addEventListener("DOMContentLoaded", () => {
             e.preventDefault();
             const email = document.getElementById("profile-email").value.trim();
             const password = document.getElementById("profile-password").value;
-            
+
             const payload = { email };
             if (password) {
                 payload.password = password;
             }
-            
+
             try {
                 const response = await fetch("/user/profile", {
                     method: "PUT",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(payload)
                 });
-                
+
                 if (response.status === 401) {
                     handleLogout();
                     return;
                 }
-                
+
                 const data = await response.json();
                 if (!response.ok) {
                     throw new Error(data.detail || "Failed to update profile.");
                 }
-                
+
                 showToast("Profile updated successfully!", "success");
                 addNotification("Updated profile settings", "success");
-                
+
                 currentUser.email = data.user.email;
                 localStorage.setItem("user", JSON.stringify(currentUser));
                 document.getElementById("user-email").textContent = data.user.email;
-                
+
                 closeProfileModal();
             } catch (err) {
                 showToast(err.message, "error");
@@ -1564,20 +1542,16 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 });
 
-// ==========================================
-// SNIPPET VERSIONS
-// ==========================================
-
 let activeVersionSnippetId = "";
 
 async function openVersionsModal(snippetId) {
     activeVersionSnippetId = snippetId;
     const listContainer = document.getElementById("versions-list-container");
     if (!listContainer) return;
-    
+
     listContainer.innerHTML = `<div style="text-align: center; padding: 1.5rem; color: var(--text-muted);"><i class="fa-solid fa-spinner fa-spin"></i> Loading versions...</div>`;
     document.getElementById("versions-modal").style.display = "flex";
-    
+
     try {
         const response = await fetch(`/snippet/${snippetId}/versions`);
         if (response.status === 401) {
@@ -1589,14 +1563,13 @@ async function openVersionsModal(snippetId) {
             throw new Error(data.detail || "Failed to load versions.");
         }
         const versions = await response.json();
-        
+
         listContainer.innerHTML = "";
         if (versions.length === 0) {
             listContainer.innerHTML = `<div style="text-align: center; padding: 1.5rem; color: var(--text-muted);">No version history available.</div>`;
             return;
         }
-        
-        // Show versions descending (latest first)
+
         [...versions].reverse().forEach(v => {
             const item = document.createElement("div");
             item.style.padding = "0.75rem";
@@ -1606,10 +1579,10 @@ async function openVersionsModal(snippetId) {
             item.style.display = "flex";
             item.style.flexDirection = "column";
             item.style.gap = "0.5rem";
-            
+
             const date = new Date(v.updated_at);
             const dateStr = date.toLocaleString();
-            
+
             item.innerHTML = `
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <span style="font-weight: 600; font-size: 0.8rem; color: #09090b;">Version #${v.version_id}</span>
@@ -1637,7 +1610,7 @@ async function restoreVersion(snippetId, versionId) {
     if (!confirm("Are you sure you want to restore this snippet to this version? A new history entry will be saved.")) {
         return;
     }
-    
+
     try {
         const response = await fetch(`/snippet/${snippetId}/versions/${versionId}/restore`, {
             method: "POST"
@@ -1650,7 +1623,7 @@ async function restoreVersion(snippetId, versionId) {
             const data = await response.json();
             throw new Error(data.detail || "Failed to restore version.");
         }
-        
+
         showToast("Snippet version restored successfully!", "success");
         addNotification(`Restored snippet to version #${versionId}`, "success");
         closeVersionsModal();
@@ -1660,28 +1633,24 @@ async function restoreVersion(snippetId, versionId) {
     }
 }
 
-// ==========================================
-// AI CODE ASSISTANT
-// ==========================================
-
 let activeAiTab = "explain";
 let currentAiAnalysis = null;
 
 async function openAiModal(snippetId, code, language) {
     document.getElementById("ai-modal").style.display = "flex";
-    
+
     const explainDiv = document.getElementById("ai-explain-text");
     explainDiv.innerHTML = `<div style="text-align: center; padding: 2rem;"><i class="fa-solid fa-brain fa-spin" style="font-size: 2rem; color: #8b5cf6;"></i><div style="margin-top: 1rem; font-weight: 500;">Analyzing snippet code with ScriptVault AI...</div></div>`;
-    
+
     document.getElementById("ai-complexity-time").textContent = "Analyzing...";
     document.getElementById("ai-complexity-space").textContent = "Analyzing...";
-    
+
     document.getElementById("ai-bugs-list").innerHTML = `<div style="text-align: center; padding: 1rem; color: var(--text-muted);">Analyzing...</div>`;
     document.getElementById("ai-optimizations-list").innerHTML = `<div style="text-align: center; padding: 1rem; color: var(--text-muted);">Analyzing...</div>`;
     document.getElementById("ai-duplicate-alert").innerHTML = `<div style="text-align: center; padding: 1rem; color: var(--text-muted);">Analyzing...</div>`;
-    
+
     switchAiTab("explain");
-    
+
     try {
         const response = await fetch("/snippets/ai-analyze", {
             method: "POST",
@@ -1702,7 +1671,7 @@ async function openAiModal(snippetId, code, language) {
             }
             throw new Error(errorMsg);
         }
-        
+
         currentAiAnalysis = await response.json();
         renderAiAnalysis();
         addNotification(`Ran AI Assistant code analysis`, "success");
@@ -1717,12 +1686,12 @@ function closeAiModal() {
 
 function switchAiTab(tabName) {
     activeAiTab = tabName;
-    
+
     const tabNames = ["explain", "complexity", "bugs", "optimizations", "duplicate"];
     tabNames.forEach(t => {
         const content = document.getElementById(`ai-content-${t}`);
         const btn = document.getElementById(`tab-ai-${t}`);
-        
+
         if (content) content.style.display = (t === tabName) ? "block" : "none";
         if (btn) {
             if (t === tabName) {
@@ -1742,12 +1711,12 @@ function switchAiTab(tabName) {
 
 function renderAiAnalysis() {
     if (!currentAiAnalysis) return;
-    
+
     document.getElementById("ai-explain-text").innerHTML = formatMarkdown(currentAiAnalysis.explanation);
-    
+
     document.getElementById("ai-complexity-time").textContent = currentAiAnalysis.time_complexity;
     document.getElementById("ai-complexity-space").textContent = currentAiAnalysis.space_complexity;
-    
+
     const bugsList = document.getElementById("ai-bugs-list");
     bugsList.innerHTML = "";
     if (!currentAiAnalysis.bugs || currentAiAnalysis.bugs.length === 0) {
@@ -1765,7 +1734,7 @@ function renderAiAnalysis() {
             bugsList.appendChild(item);
         });
     }
-    
+
     const optsList = document.getElementById("ai-optimizations-list");
     optsList.innerHTML = "";
     if (!currentAiAnalysis.optimizations || currentAiAnalysis.optimizations.length === 0) {
@@ -1783,7 +1752,7 @@ function renderAiAnalysis() {
             optsList.appendChild(item);
         });
     }
-    
+
     const dupAlert = document.getElementById("ai-duplicate-alert");
     dupAlert.innerHTML = "";
     const dup = currentAiAnalysis.duplicate_detection;
@@ -1820,10 +1789,6 @@ function formatMarkdown(text) {
         .replace(/^\s*-\s*(.*?)\r?$/gm, '<li style="margin-left: 1.25rem; font-size: 0.8rem; list-style-type: disc; margin-bottom: 0.25rem;">$1</li>');
 }
 
-// ==========================================
-// CLIENT-SIDE ACTIVITY LOGS (NOTIFICATIONS)
-// ==========================================
-
 function addNotification(message, type = "info") {
     let notifications = JSON.parse(localStorage.getItem("notifications") || "[]");
     const newNotif = {
@@ -1834,7 +1799,7 @@ function addNotification(message, type = "info") {
         read: false
     };
     notifications.unshift(newNotif);
-    notifications = notifications.slice(0, 15); // Keep last 15
+    notifications = notifications.slice(0, 15); 
     localStorage.setItem("notifications", JSON.stringify(notifications));
     updateNotificationsUI();
 }
@@ -1843,23 +1808,23 @@ function updateNotificationsUI() {
     const list = document.getElementById("notification-list");
     const badge = document.getElementById("notification-badge");
     if (!list) return;
-    
+
     const notifications = JSON.parse(localStorage.getItem("notifications") || "[]");
     const unreadCount = notifications.filter(n => !n.read).length;
-    
+
     if (unreadCount > 0 && badge) {
         badge.textContent = unreadCount;
         badge.style.display = "flex";
     } else if (badge) {
         badge.style.display = "none";
     }
-    
+
     list.innerHTML = "";
     if (notifications.length === 0) {
         list.innerHTML = `<div style="padding: 1rem; text-align: center; color: var(--text-muted);">No activity logs.</div>`;
         return;
     }
-    
+
     notifications.forEach(n => {
         const item = document.createElement("div");
         item.style.padding = "0.5rem 0.75rem";
@@ -1868,10 +1833,10 @@ function updateNotificationsUI() {
         item.style.flexDirection = "column";
         item.style.gap = "0.15rem";
         if (!n.read) item.style.background = "#f0f9ff";
-        
+
         const date = new Date(n.time);
         const timeStr = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-        
+
         item.innerHTML = `
             <div style="color: #09090b; font-weight: 500; font-size: 0.75rem;">${escapeHtml(n.message)}</div>
             <div style="font-size: 0.6rem; color: var(--text-muted);">${timeStr}</div>
@@ -1883,7 +1848,7 @@ function updateNotificationsUI() {
 function toggleNotificationDropdown() {
     const menu = document.getElementById("notification-dropdown");
     if (!menu) return;
-    
+
     if (menu.style.display === "none" || menu.style.display === "") {
         menu.style.display = "flex";
         let notifications = JSON.parse(localStorage.getItem("notifications") || "[]");
@@ -1909,23 +1874,23 @@ function toggleArchivedFilter() {
     }
 
     showArchived = !showArchived;
-    
+
     const btn = document.getElementById("filter-archived");
     const titleLabel = document.getElementById("dashboard-title");
-    
+
     currentLanguage = "";
     currentTag = "";
     document.getElementById("search-bar").value = "";
     currentSearch = "";
     currentFilterFavorites = false;
-    
+
     const sidebar = document.querySelector(".sidebar-nav");
     const buttons = sidebar.querySelectorAll(".nav-item");
     buttons.forEach(b => b.classList.remove("active"));
-    
+
     const activeNav = document.getElementById("nav-snippets");
     if (activeNav) activeNav.classList.add("active");
-    
+
     if (showArchived) {
         if (btn) btn.classList.add("active");
         titleLabel.textContent = "Archived Snippets";
@@ -1934,7 +1899,7 @@ function toggleArchivedFilter() {
         if (allBtn) allBtn.classList.add("active");
         titleLabel.textContent = "All Snippets";
     }
-    
+
     fetchSnippets();
 }
 
@@ -1951,7 +1916,7 @@ async function togglePin(snippetId, btn) {
         if (!response.ok) {
             throw new Error(data.detail || "Failed to toggle pin.");
         }
-        
+
         if (data.pinned) {
             showToast("Snippet pinned to top!", "success");
             addNotification("Pinned code snippet", "info");
@@ -1959,7 +1924,7 @@ async function togglePin(snippetId, btn) {
             showToast("Snippet unpinned.", "info");
             addNotification("Unpinned code snippet", "info");
         }
-        
+
         fetchSnippets();
     } catch (err) {
         showToast(err.message, "error");
@@ -1979,7 +1944,7 @@ async function toggleArchive(snippetId, btn) {
         if (!response.ok) {
             throw new Error(data.detail || "Failed to toggle archive.");
         }
-        
+
         if (data.archived) {
             showToast("Snippet moved to archive.", "success");
             addNotification("Archived code snippet", "info");
@@ -1987,16 +1952,12 @@ async function toggleArchive(snippetId, btn) {
             showToast("Snippet restored from archive.", "success");
             addNotification("Restored snippet from archive", "info");
         }
-        
+
         fetchSnippets();
     } catch (err) {
         showToast(err.message, "error");
     }
 }
-
-// ==========================================
-// NOTES MANAGEMENT CONTROLLER
-// ==========================================
 
 async function fetchNotes() {
     try {
@@ -2019,7 +1980,7 @@ function renderNotesList() {
     if (!listDiv) return;
 
     listDiv.innerHTML = "";
-    
+
     let filtered = allNotes || [];
     if (noteSearchQuery) {
         const q = noteSearchQuery.toLowerCase();
@@ -2028,7 +1989,7 @@ function renderNotesList() {
             (n.content || "").toLowerCase().includes(q)
         );
     }
-    
+
     if (filtered.length === 0) {
         listDiv.innerHTML = `
             <div style="text-align: center; padding: 2rem 1rem; color: var(--text-muted); font-size: 0.8rem;">
@@ -2037,7 +1998,7 @@ function renderNotesList() {
         `;
         return;
     }
-    
+
     filtered.forEach(note => {
         const date = new Date(note.updated_at || Date.now());
         const formattedDate = date.toLocaleDateString(undefined, { 
@@ -2046,10 +2007,10 @@ function renderNotesList() {
             hour: '2-digit', 
             minute: '2-digit' 
         });
-        
+
         const noteSnippet = note.content ? note.content.substring(0, 60).replace(/[\#\*\_`\-\n]/g, " ") : "No content";
         const isActive = activeNoteId === note.id;
-        
+
         const btn = document.createElement("button");
         btn.className = `note-item ${isActive ? 'active' : ''}`;
         btn.innerHTML = `
@@ -2068,7 +2029,7 @@ function handleNoteSearch(query) {
 }
 
 async function selectNote(noteId) {
-    // Flush autosave timer for current note before switching
+
     if (noteAutosaveTimer) {
         clearTimeout(noteAutosaveTimer);
         noteAutosaveTimer = null;
@@ -2076,22 +2037,22 @@ async function selectNote(noteId) {
             await saveCurrentNote(activeNoteId);
         }
     }
-    
+
     activeNoteId = noteId;
     renderNotesList();
-    
+
     const emptyState = document.getElementById("note-editor-empty-state");
     const activeState = document.getElementById("note-editor-active-state");
-    
+
     if (!noteId) {
         emptyState.style.display = "flex";
         activeState.style.display = "none";
         return;
     }
-    
+
     emptyState.style.display = "none";
     activeState.style.display = "flex";
-    
+
     try {
         const response = await fetch(`/note/${noteId}`);
         if (response.status === 401) {
@@ -2100,11 +2061,10 @@ async function selectNote(noteId) {
         }
         if (!response.ok) throw new Error("Failed to load note details.");
         const note = await response.json();
-        
+
         document.getElementById("note-title-input").value = note.title || "";
         document.getElementById("note-content-input").value = note.content || "";
-        
-        // Reset view tab to edit mode & update live stats
+
         toggleNoteTab('edit');
         updateNotepadStats();
         document.getElementById("note-save-status").textContent = "";
@@ -2129,15 +2089,15 @@ async function createNewNote() {
                 workspace_id: activeWorkspaceId
             })
         });
-        
+
         if (response.status === 401) {
             handleLogout();
             return;
         }
-        
+
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || "Failed to create note.");
-        
+
         showToast("Note created", "success");
         activeNoteId = data.id;
         await fetchNotes();
@@ -2154,10 +2114,10 @@ async function saveCurrentNote(targetNoteId = activeNoteId) {
 
     const title = titleInput.value.trim() || "Untitled Note";
     const content = contentInput.value;
-    
+
     const saveStatus = document.getElementById("note-save-status");
     if (saveStatus) saveStatus.textContent = "Saving...";
-    
+
     try {
         if (!targetNoteId) {
             const response = await fetch("/notes", {
@@ -2183,18 +2143,17 @@ async function saveCurrentNote(targetNoteId = activeNoteId) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ title, content })
         });
-        
+
         if (response.status === 401) {
             handleLogout();
             return;
         }
-        
+
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || "Failed to save note.");
-        
+
         if (saveStatus) saveStatus.textContent = "Saved";
-        
-        // Quietly refresh list to update title/snippets without deselection
+
         const notesResp = await fetch(`/notes?workspace_id=${activeWorkspaceId}`);
         if (notesResp.ok) {
             allNotes = await notesResp.json();
@@ -2209,12 +2168,24 @@ async function saveCurrentNote(targetNoteId = activeNoteId) {
 function onNoteContentChange() {
     const saveStatus = document.getElementById("note-save-status");
     if (saveStatus) saveStatus.textContent = "Unsaved changes";
-    
+
     if (noteAutosaveTimer) clearTimeout(noteAutosaveTimer);
-    
+
     updateNotepadStats();
 
-    // Autosave after 2 seconds of inactivity
+    const previewPane = document.getElementById("note-preview-pane");
+    if (previewPane && previewPane.style.display !== "none") {
+        const markdownContent = document.getElementById("note-content-input").value;
+        if (window.marked) {
+            previewPane.innerHTML = marked.parse(markdownContent || "*No content written yet.*");
+        } else {
+            previewPane.innerHTML = escapeHtml(markdownContent || "No content").replace(/\n/g, "<br>");
+        }
+        if (window.Prism && previewPane) {
+            Prism.highlightAllUnder(previewPane);
+        }
+    }
+
     noteAutosaveTimer = setTimeout(() => {
         saveCurrentNote();
     }, 2000);
@@ -2223,24 +2194,24 @@ function onNoteContentChange() {
 async function deleteCurrentNote() {
     if (!activeNoteId) return;
     if (!confirm("Are you sure you want to delete this note?")) return;
-    
+
     if (noteAutosaveTimer) clearTimeout(noteAutosaveTimer);
-    
+
     try {
         const response = await fetch(`/note/${activeNoteId}`, {
             method: "DELETE"
         });
-        
+
         if (response.status === 401) {
             handleLogout();
             return;
         }
-        
+
         if (!response.ok) {
             const data = await response.json();
             throw new Error(data.detail || "Failed to delete note.");
         }
-        
+
         showToast("Note deleted", "info");
         activeNoteId = null;
         await fetchNotes();
@@ -2252,22 +2223,16 @@ async function deleteCurrentNote() {
 
 function toggleNoteTab(tabName) {
     const btnEdit = document.getElementById("note-btn-edit");
+    const btnSplit = document.getElementById("note-btn-split");
     const btnPreview = document.getElementById("note-btn-preview");
     const editPane = document.getElementById("note-edit-pane");
     const previewPane = document.getElementById("note-preview-pane");
-    
-    if (tabName === 'edit') {
-        if (btnEdit) btnEdit.classList.add("active");
-        if (btnPreview) btnPreview.classList.remove("active");
-        if (editPane) editPane.style.display = "flex";
-        if (previewPane) previewPane.style.display = "none";
-    } else {
-        if (btnEdit) btnEdit.classList.remove("active");
-        if (btnPreview) btnPreview.classList.add("active");
-        if (editPane) editPane.style.display = "none";
-        if (previewPane) previewPane.style.display = "block";
-        
-        // Render Markdown content
+
+    if (btnEdit) btnEdit.classList.remove("active");
+    if (btnSplit) btnSplit.classList.remove("active");
+    if (btnPreview) btnPreview.classList.remove("active");
+
+    const updatePreviewHTML = () => {
         const markdownContent = document.getElementById("note-content-input").value;
         if (window.marked) {
             previewPane.innerHTML = marked.parse(markdownContent || "*No content written yet.*");
@@ -2277,37 +2242,71 @@ function toggleNoteTab(tabName) {
         if (window.Prism && previewPane) {
             Prism.highlightAllUnder(previewPane);
         }
+    };
+
+    const bodyDiv = document.querySelector(".note-editor-body");
+
+    if (tabName === 'edit') {
+        if (btnEdit) btnEdit.classList.add("active");
+        if (bodyDiv) bodyDiv.style.flexDirection = "column";
+        if (editPane) {
+            editPane.style.display = "flex";
+            editPane.style.width = "100%";
+        }
+        if (previewPane) previewPane.style.display = "none";
+    } else if (tabName === 'split') {
+        if (btnSplit) btnSplit.classList.add("active");
+        if (bodyDiv) bodyDiv.style.flexDirection = "row";
+        if (editPane) {
+            editPane.style.display = "flex";
+            editPane.style.flex = "1";
+            editPane.style.paddingRight = "1rem";
+        }
+        if (previewPane) {
+            previewPane.style.display = "block";
+            previewPane.style.flex = "1";
+            previewPane.style.borderLeft = "1px solid var(--border-color)";
+            previewPane.style.paddingLeft = "1rem";
+        }
+        updatePreviewHTML();
+    } else {
+        if (btnPreview) btnPreview.classList.add("active");
+        if (bodyDiv) bodyDiv.style.flexDirection = "column";
+        if (editPane) editPane.style.display = "none";
+        if (previewPane) {
+            previewPane.style.display = "block";
+            previewPane.style.flex = "1";
+            previewPane.style.borderLeft = "none";
+            previewPane.style.paddingLeft = "0";
+        }
+        updatePreviewHTML();
     }
 }
 
-// ==========================================
-// PLAYGROUND IDE CONTROLLER
-// ==========================================
-
 const PLAYGROUND_STARTER_TEMPLATES = {
-    "Python": `# Python Playground Scratchpad\n# Write code here and click "Run Code"\n\ndef greet(name):\n    return f"Hello {name}, welcome to Python!"\n\nprint(greet("Developer"))\n`,
-    "JavaScript": `// JavaScript Playground Scratchpad\n// Write code here and click "Run Code"\n\nfunction greet(name) {\n    console.log(\`Hello \${name}, welcome to JavaScript!\`);\n}\n\ngreet("Developer");\n`,
-    "Java": `// Java Playground Scratchpad\n// Main class must be named "Main"\n\npublic class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello Developer, welcome to Java!");\n    }\n}\n`,
-    "C": `/* C Playground Scratchpad */\n#include <stdio.h>\n\nint main() {\n    printf("Hello Developer, welcome to C!\\n");\n    return 0;\n}\n`,
-    "C++": `/* C++ Playground Scratchpad */\n#include <iostream>\n\nint main() {\n    std::cout << "Hello Developer, welcome to C++!" << std::endl;\n    return 0;\n}\n`,
-    "HTML": `<!-- HTML Web Live Preview Sandbox -->\n<!DOCTYPE html>\n<html>\n<head>\n    <style>\n        body {\n            font-family: system-ui, sans-serif;\n            background: #09090b;\n            color: #38bdf8;\n            text-align: center;\n            padding: 3rem;\n        }\n        h1 {\n            color: #818cf8;\n        }\n    </style>\n</head>\n<body>\n    <h1>Hello from Web Live Preview!</h1>\n    <p>Modify HTML/CSS code and check the Live Preview tab.</p>\n</body>\n</html>\n`,
-    "CSS": `/* CSS Playground Scratchpad */\nbody {\n    background-color: #09090b;\n    color: #f4f4f5;\n    font-family: system-ui, sans-serif;\n    padding: 20px;\n}\n\n.hero-card {\n    background: #18181b;\n    border: 1px solid #6366f1;\n    border-radius: 8px;\n    padding: 1.5rem;\n}\n`,
-    "SQL": `-- SQL Query Playground Scratchpad\nCREATE TABLE developers (\n    id INT PRIMARY KEY,\n    name VARCHAR(50),\n    language VARCHAR(50)\n);\n\nINSERT INTO developers VALUES (1, 'Musaveer', 'Python');\nSELECT * FROM developers;\n`
+    "Python": `def greet(name):\n    return f"Hello {name}, welcome to Python!"\n\nprint(greet("Developer"))\n`,
+    "JavaScript": `function greet(name) {\n    console.log(\`Hello \${name}, welcome to JavaScript!\`);\n}\n\ngreet("Developer");\n`,
+    "Java": `public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello Developer, welcome to Java!");\n    }\n}\n`,
+    "C": `#include <stdio.h>\n\nint main() {\n    printf("Hello Developer, welcome to C!\\n");\n    return 0;\n}\n`,
+    "C++": `#include <iostream>\n\nint main() {\n    std::cout << "Hello Developer, welcome to C++!" << std::endl;\n    return 0;\n}\n`,
+    "HTML": `<!DOCTYPE html>\n<html>\n<head>\n    <style>\n        body {\n            font-family: system-ui, sans-serif;\n            background: #09090b;\n            color: #38bdf8;\n            text-align: center;\n            padding: 3rem;\n        }\n        h1 {\n            color: #818cf8;\n        }\n    </style>\n</head>\n<body>\n    <h1>Hello from Web Live Preview!</h1>\n    <p>Modify HTML/CSS code and check the Live Preview tab.</p>\n</body>\n</html>\n`,
+    "CSS": `body {\n    background-color: #09090b;\n    color: #f4f4f5;\n    font-family: system-ui, sans-serif;\n    padding: 20px;\n}\n\n.hero-card {\n    background: #18181b;\n    border: 1px solid #6366f1;\n    border-radius: 8px;\n    padding: 1.5rem;\n}\n`,
+    "SQL": `CREATE TABLE developers (\n    id INT PRIMARY KEY,\n    name VARCHAR(50),\n    language VARCHAR(50)\n);\n\nINSERT INTO developers VALUES (1, 'Musaveer', 'Python');\nSELECT * FROM developers;\n`
 };
 
 function initPlayground() {
-    if (playgroundEditor) return; // already initialized
-    
+    if (playgroundEditor) return; 
+
     const container = document.getElementById('playground-monaco-container');
     if (!container) return;
-    
+
     if (typeof monaco === 'undefined') {
         setTimeout(initPlayground, 100);
         return;
     }
-    
+
     const initialCode = PLAYGROUND_STARTER_TEMPLATES["JavaScript"];
-    
+
     playgroundEditor = monaco.editor.create(container, {
         value: initialCode,
         language: 'javascript',
@@ -2321,7 +2320,7 @@ function initPlayground() {
         wordBasedSuggestions: true,
         snippetSuggestions: "inline"
     });
-    
+
     activePlaygroundLang = "JavaScript";
     document.getElementById("playground-lang").value = "JavaScript";
     updatePlaygroundPreviewTabVisibility();
@@ -2330,10 +2329,10 @@ function initPlayground() {
 function changePlaygroundLanguage(lang) {
     activePlaygroundLang = lang;
     if (!playgroundEditor) return;
-    
+
     const model = playgroundEditor.getModel();
     if (!model) return;
-    
+
     const MONACO_LANG_MAP = {
         "Python": "python",
         "JavaScript": "javascript",
@@ -2344,10 +2343,10 @@ function changePlaygroundLanguage(lang) {
         "CSS": "css",
         "SQL": "sql"
     };
-    
+
     const monacoLang = MONACO_LANG_MAP[lang] || "plaintext";
     monaco.editor.setModelLanguage(model, monacoLang);
-    
+
     const currentVal = playgroundEditor.getValue();
     const isStarterOrEmpty = !currentVal || 
         Object.values(PLAYGROUND_STARTER_TEMPLATES).some(t => t.trim() === currentVal.trim()) ||
@@ -2355,10 +2354,10 @@ function changePlaygroundLanguage(lang) {
         currentVal.replace(/^(?:\/\/|#|\/\*).*$/gm, "").trim() === "";
 
     if (isStarterOrEmpty) {
-        const newTemplate = PLAYGROUND_STARTER_TEMPLATES[lang] || `// ${lang} Playground Scratchpad\n`;
+        const newTemplate = PLAYGROUND_STARTER_TEMPLATES[lang] || `${lang} Playground Scratchpad\n`;
         playgroundEditor.setValue(newTemplate);
     }
-    
+
     updatePlaygroundPreviewTabVisibility();
     showToast(`Switched Playground to ${lang}`, "info");
 }
@@ -2386,19 +2385,19 @@ function switchPlaygroundTab(tabName) {
     const btnOutput = document.getElementById("pg-tab-btn-output");
     const btnInput = document.getElementById("pg-tab-btn-input");
     const btnPreview = document.getElementById("pg-tab-btn-preview");
-    
+
     const paneOutput = document.getElementById("pg-tab-pane-output");
     const paneInput = document.getElementById("pg-tab-pane-input");
     const panePreview = document.getElementById("pg-tab-pane-preview");
-    
+
     btnOutput.classList.remove("active");
     btnInput.classList.remove("active");
     btnPreview.classList.remove("active");
-    
+
     paneOutput.style.display = "none";
     paneInput.style.display = "none";
     panePreview.style.display = "none";
-    
+
     if (tabName === "output") {
         btnOutput.classList.add("active");
         paneOutput.style.display = "flex";
@@ -2413,18 +2412,18 @@ function switchPlaygroundTab(tabName) {
 
 async function runPlaygroundCode() {
     if (!playgroundEditor) return;
-    
+
     const code = playgroundEditor.getValue();
     const lang = activePlaygroundLang;
     const stdin = document.getElementById("playground-stdin").value;
-    
+
     const statusSpan = document.getElementById("playground-run-status");
     const outputConsole = document.getElementById("playground-console-output");
-    
+
     statusSpan.textContent = "Executing...";
     outputConsole.textContent = "Running program...\n";
     outputConsole.style.color = "#a3e635";
-    
+
     if (["javascript", "html", "css"].includes(lang.toLowerCase())) {
         switchPlaygroundTab("preview");
         const iframe = document.getElementById("playground-web-preview");
@@ -2479,12 +2478,12 @@ async function runPlaygroundCode() {
                 </html>
             `;
         }
-        
+
         statusSpan.textContent = "Rendered";
         outputConsole.textContent = "Rendered inside Live Preview tab.";
         return;
     }
-    
+
     try {
         const response = await fetch("/snippets/run", {
             method: "POST",
@@ -2495,15 +2494,15 @@ async function runPlaygroundCode() {
                 input: stdin
             })
         });
-        
+
         if (response.status === 401) {
             handleLogout();
             return;
         }
-        
+
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || "Execution request failed.");
-        
+
         let terminalText = "";
         if (data.stderr) {
             terminalText += `[STDERR]\n${data.stderr}\n`;
@@ -2512,11 +2511,11 @@ async function runPlaygroundCode() {
         if (data.stdout !== undefined) {
             terminalText += data.stdout;
         }
-        
+
         if (!data.stderr && !data.stdout) {
             terminalText = "(No output program terminated successfully)";
         }
-        
+
         outputConsole.textContent = terminalText;
         statusSpan.textContent = `Completed (exit code ${data.exit_code})`;
     } catch (err) {
@@ -2526,9 +2525,6 @@ async function runPlaygroundCode() {
     }
 }
 
-// ====================================================
-// INTERACTIVE EXCEL SPREADSHEET GRID ENGINE
-// ====================================================
 let excelRows = 20;
 let excelCols = 10;
 let excelGridData = {};
@@ -2579,7 +2575,7 @@ function renderExcelGrid() {
             const colLetter = colIndexToLetter(c);
             const ref = `${colLetter}${r}`;
             const cell = excelGridData[ref] || { raw: "", val: "" };
-            
+
             let displayVal = cell.val !== undefined ? cell.val : cell.raw;
             if (cell.raw && String(cell.raw).startsWith("=")) {
                 displayVal = evaluateExcelFormula(cell.raw);
@@ -2594,7 +2590,7 @@ function renderExcelGrid() {
             if (cell.color) styleStr += `color: ${cell.color}; `;
 
             const activeClass = ref === activeCellRef ? "active-cell" : "";
-            // When editing active cell, show raw formula; otherwise show evaluated value
+
             const inputVal = (ref === activeCellRef && document.activeElement && document.activeElement.dataset && document.activeElement.dataset.ref === ref) 
                 ? (cell.raw || "") 
                 : displayVal;
@@ -2635,13 +2631,11 @@ function onExcelCellFocus(ref) {
     const formulaBar = document.getElementById("excel-formula-bar");
     if (formulaBar) formulaBar.value = cell.raw || "";
 
-    // Set cell input value to raw formula on focus
     const cellInput = document.querySelector(`input[data-ref="${ref}"]`);
     if (cellInput && cell.raw && String(cell.raw).startsWith("=")) {
         cellInput.value = cell.raw;
     }
 
-    // Sync toolbar formatting pickers
     const bgColorInput = document.getElementById("excel-bg-color");
     const textColorInput = document.getElementById("excel-text-color");
     if (bgColorInput && cell.bg) bgColorInput.value = cell.bg;
@@ -2712,7 +2706,6 @@ function evaluateExcelFormula(formula) {
     try {
         let clean = formula.substring(1).toUpperCase().trim();
 
-        // 1. SUM(range)
         const sumMatch = clean.match(/^SUM\(([A-Z]+\d+):([A-Z]+\d+)\)$/);
         if (sumMatch) {
             const values = getCellRangeValues(sumMatch[1], sumMatch[2]);
@@ -2720,7 +2713,6 @@ function evaluateExcelFormula(formula) {
             return nums.reduce((acc, n) => acc + n, 0);
         }
 
-        // 2. AVERAGE(range)
         const avgMatch = clean.match(/^AVERAGE\(([A-Z]+\d+):([A-Z]+\d+)\)$/);
         if (avgMatch) {
             const values = getCellRangeValues(avgMatch[1], avgMatch[2]);
@@ -2730,7 +2722,6 @@ function evaluateExcelFormula(formula) {
             return Number.isInteger(avg) ? avg : parseFloat(avg.toFixed(2));
         }
 
-        // 3. COUNT(range)
         const countMatch = clean.match(/^COUNT\(([A-Z]+\d+):([A-Z]+\d+)\)$/);
         if (countMatch) {
             const values = getCellRangeValues(countMatch[1], countMatch[2]);
@@ -2738,7 +2729,6 @@ function evaluateExcelFormula(formula) {
             return nums.length;
         }
 
-        // 4. MIN(range)
         const minMatch = clean.match(/^MIN\(([A-Z]+\d+):([A-Z]+\d+)\)$/);
         if (minMatch) {
             const values = getCellRangeValues(minMatch[1], minMatch[2]);
@@ -2746,7 +2736,6 @@ function evaluateExcelFormula(formula) {
             return nums.length ? Math.min(...nums) : 0;
         }
 
-        // 5. MAX(range)
         const maxMatch = clean.match(/^MAX\(([A-Z]+\d+):([A-Z]+\d+)\)$/);
         if (maxMatch) {
             const values = getCellRangeValues(maxMatch[1], maxMatch[2]);
@@ -2754,7 +2743,6 @@ function evaluateExcelFormula(formula) {
             return nums.length ? Math.max(...nums) : 0;
         }
 
-        // 6. PRODUCT(range)
         const prodMatch = clean.match(/^PRODUCT\(([A-Z]+\d+):([A-Z]+\d+)\)$/);
         if (prodMatch) {
             const values = getCellRangeValues(prodMatch[1], prodMatch[2]);
@@ -2762,7 +2750,6 @@ function evaluateExcelFormula(formula) {
             return nums.length ? nums.reduce((acc, n) => acc * n, 1) : 0;
         }
 
-        // Replace cell references with their numeric/eval value
         clean = clean.replace(/([A-Z]+\d+)/g, (match) => {
             const cell = excelGridData[match];
             if (!cell) return "0";
@@ -2836,10 +2823,79 @@ function deleteExcelCol() {
     }
 }
 
+function insertExcelFormula(funcName) {
+    if (!activeCellRef) activeCellRef = "A1";
+    const formulaBar = document.getElementById("excel-formula-bar");
+    let formula = "";
+    if (funcName === "SUM") formula = "=SUM(C2:C6)";
+    else if (funcName === "AVERAGE") formula = "=AVERAGE(C2:C6)";
+    else if (funcName === "MIN") formula = "=MIN(C2:C6)";
+    else if (funcName === "MAX") formula = "=MAX(C2:C6)";
+    else if (funcName === "COUNT") formula = "=COUNT(C2:C6)";
+
+    if (formulaBar) formulaBar.value = formula;
+    onExcelCellInput(activeCellRef, formula);
+    renderExcelGrid();
+    showToast(`Inserted =${funcName}() into ${activeCellRef}`, "info");
+}
+
+let activeSheetTab = 'Sheet1';
+let workbookSheetsData = { 'Sheet1': {}, 'Sheet2': {} };
+
+function switchWorksheetTab(sheetName) {
+    workbookSheetsData[activeSheetTab] = JSON.parse(JSON.stringify(excelGridData));
+    activeSheetTab = sheetName;
+    if (!workbookSheetsData[sheetName]) {
+        workbookSheetsData[sheetName] = {};
+    }
+    excelGridData = JSON.parse(JSON.stringify(workbookSheetsData[sheetName]));
+    
+    document.querySelectorAll('.excel-tab-btn').forEach(btn => {
+        if (btn.title === "Add Worksheet") return;
+        btn.style.background = 'transparent';
+        btn.style.color = 'var(--text-secondary)';
+        btn.style.borderColor = 'transparent';
+        btn.style.fontWeight = '500';
+        if (btn.textContent.trim().includes(sheetName)) {
+            btn.style.background = '#ffffff';
+            btn.style.color = '#107c41';
+            btn.style.borderColor = 'var(--border-color)';
+            btn.style.fontWeight = '600';
+        }
+    });
+    
+    renderExcelGrid();
+    showToast(`Switched to ${sheetName}`, "info");
+}
+
+function addWorksheetTab() {
+    const sheetCount = Object.keys(workbookSheetsData).length + 1;
+    const newSheetName = `Sheet${sheetCount}`;
+    workbookSheetsData[newSheetName] = {};
+    
+    const tabBar = document.getElementById('excel-sheets-tab-bar');
+    const addBtn = tabBar.querySelector('button[title="Add Worksheet"]');
+    
+    const newBtn = document.createElement('button');
+    newBtn.className = 'excel-tab-btn';
+    newBtn.onclick = () => switchWorksheetTab(newSheetName);
+    newBtn.style.padding = '0.2rem 0.75rem';
+    newBtn.style.fontSize = '0.75rem';
+    newBtn.style.background = 'transparent';
+    newBtn.style.border = '1px solid transparent';
+    newBtn.style.borderRadius = '4px';
+    newBtn.style.color = 'var(--text-secondary)';
+    newBtn.style.cursor = 'pointer';
+    newBtn.textContent = newSheetName;
+    
+    tabBar.insertBefore(newBtn, addBtn);
+    switchWorksheetTab(newSheetName);
+}
+
 function formatExcelCell(type, val) {
     if (!activeCellRef) return;
     if (!excelGridData[activeCellRef]) excelGridData[activeCellRef] = { raw: "", val: "" };
-    
+
     if (type === "bold") excelGridData[activeCellRef].bold = !excelGridData[activeCellRef].bold;
     if (type === "italic") excelGridData[activeCellRef].italic = !excelGridData[activeCellRef].italic;
     if (type.startsWith("align-")) excelGridData[activeCellRef].align = type.replace("align-", "");
@@ -2861,51 +2917,56 @@ function loadExcelTemplate(templateKey) {
     excelGridData = {};
     if (templateKey === "snippets") {
         excelGridData = {
-            "A1": { raw: "Title", bold: true, bg: "#e2e8f0" },
-            "B1": { raw: "Language", bold: true, bg: "#e2e8f0" },
-            "C1": { raw: "Tags", bold: true, bg: "#e2e8f0" },
-            "D1": { raw: "Description", bold: true, bg: "#e2e8f0" },
-            "A2": { raw: "Fetch Wrapper" }, "B2": { raw: "JavaScript" }, "C2": { raw: "api, fetch" }, "D2": { raw: "Async HTTP GET helper" },
-            "A3": { raw: "Quick Sort" }, "B3": { raw: "Python" }, "C3": { raw: "algo, sorting" }, "D3": { raw: "Divide & Conquer O(n log n)" },
-            "A4": { raw: "Database Connection" }, "B4": { raw: "Java" }, "C4": { raw: "sql, jdbc" }, "D4": { raw: "JDBC Driver setup" }
+            "A1": { raw: "Snippet Title", bold: true, bg: "#107c41", color: "#ffffff" },
+            "B1": { raw: "Language", bold: true, bg: "#107c41", color: "#ffffff" },
+            "C1": { raw: "Category", bold: true, bg: "#107c41", color: "#ffffff" },
+            "D1": { raw: "Usage Count", bold: true, bg: "#107c41", color: "#ffffff" },
+            "A2": { raw: "Async Fetch Wrapper" }, "B2": { raw: "JavaScript" }, "C2": { raw: "API Utilities" }, "D2": { raw: "42" },
+            "A3": { raw: "Binary Search Algo" }, "B3": { raw: "Python" }, "C3": { raw: "Algorithms" }, "D3": { raw: "85" },
+            "A4": { raw: "JDBC Database Pool" }, "B4": { raw: "Java" }, "C4": { raw: "Database" }, "D4": { raw: "19" },
+            "A5": { raw: "FastAPI JWT Auth" }, "B5": { raw: "Python" }, "C5": { raw: "Security" }, "D5": { raw: "64" },
+            "A6": { raw: "CSS Glassmorphism" }, "B6": { raw: "CSS" }, "C6": { raw: "UI Design" }, "D6": { raw: "51" },
+            "A7": { raw: "TOTAL USAGE", bold: true, bg: "#dcfce7", color: "#166534" },
+            "D7": { raw: "=SUM(D2:D6)", bold: true, bg: "#dcfce7", color: "#166534" }
         };
-    } else if (templateKey === "notes") {
-        excelGridData = {
-            "A1": { raw: "Note Title", bold: true, bg: "#e0f2fe" },
-            "B1": { raw: "Content Preview", bold: true, bg: "#e0f2fe" },
-            "C1": { raw: "Updated Date", bold: true, bg: "#e0f2fe" }
-        };
-        if (allNotes && allNotes.length > 0) {
-            allNotes.forEach((n, idx) => {
-                const row = idx + 2;
-                excelGridData[`A${row}`] = { raw: n.title || "Untitled Note" };
-                excelGridData[`B${row}`] = { raw: (n.content || "").substring(0, 50).replace(/\n/g, ' ') };
-                excelGridData[`C${row}`] = { raw: new Date(n.updated_at || Date.now()).toLocaleDateString() };
-            });
-            excelRows = Math.max(20, allNotes.length + 5);
-        } else {
-            excelGridData["A2"] = { raw: "No notes saved yet." };
-        }
     } else if (templateKey === "budget") {
         excelGridData = {
-            "A1": { raw: "Expense Item", bold: true, bg: "#fef3c7" },
-            "B1": { raw: "Category", bold: true, bg: "#fef3c7" },
-            "C1": { raw: "Amount ($)", bold: true, bg: "#fef3c7" },
-            "A2": { raw: "Cloud Hosting" }, "B2": { raw: "Infrastructure" }, "C2": { raw: "45" },
-            "A3": { raw: "Domain Renewal" }, "B3": { raw: "Domain" }, "C3": { raw: "15" },
-            "A4": { raw: "API Credits" }, "B4": { raw: "AI Tooling" }, "C4": { raw: "30" },
-            "A5": { raw: "TOTAL", bold: true, bg: "#fee2e2" },
-            "C5": { raw: "=SUM(C2:C4)", bold: true, bg: "#fee2e2" }
+            "A1": { raw: "Budget Item", bold: true, bg: "#1e3a8a", color: "#ffffff" },
+            "B1": { raw: "Category", bold: true, bg: "#1e3a8a", color: "#ffffff" },
+            "C1": { raw: "Amount ($)", bold: true, bg: "#1e3a8a", color: "#ffffff" },
+            "A2": { raw: "Monthly Income", bold: true }, "B2": { raw: "Revenue" }, "C2": { raw: "3500" },
+            "A3": { raw: "Office Rent" }, "B3": { raw: "Fixed" }, "C3": { raw: "1200" },
+            "A4": { raw: "Cloud Servers" }, "B4": { raw: "Infrastructure" }, "C4": { raw: "150" },
+            "A5": { raw: "API & AI Credits" }, "B5": { raw: "Tooling" }, "C5": { raw: "80" },
+            "A6": { raw: "Food & Supplies" }, "B6": { raw: "Living" }, "C6": { raw: "400" },
+            "A7": { raw: "TOTAL EXPENSES", bold: true, bg: "#fee2e2", color: "#991b1b" },
+            "C7": { raw: "=SUM(C3:C6)", bold: true, bg: "#fee2e2", color: "#991b1b" },
+            "A8": { raw: "NET SAVINGS", bold: true, bg: "#dcfce7", color: "#166534" },
+            "C8": { raw: "=C2-C7", bold: true, bg: "#dcfce7", color: "#166534" }
         };
     } else if (templateKey === "tasks") {
         excelGridData = {
-            "A1": { raw: "Task Name", bold: true, bg: "#eff6ff" },
-            "B1": { raw: "Assignee", bold: true, bg: "#eff6ff" },
-            "C1": { raw: "Status", bold: true, bg: "#eff6ff" },
-            "D1": { raw: "Priority", bold: true, bg: "#eff6ff" },
-            "A2": { raw: "Excel Integration" }, "B2": { raw: "Dev Team" }, "C2": { raw: "Done" }, "D2": { raw: "High" },
-            "A3": { raw: "Notepad Suite Upgrade" }, "B3": { raw: "Dev Team" }, "C3": { raw: "Done" }, "D3": { raw: "High" },
-            "A4": { raw: "Share & PDF/ZIP Export" }, "B4": { raw: "Dev Team" }, "C4": { raw: "Completed" }, "D4": { raw: "Medium" }
+            "A1": { raw: "Task Name", bold: true, bg: "#312e81", color: "#ffffff" },
+            "B1": { raw: "Assignee", bold: true, bg: "#312e81", color: "#ffffff" },
+            "C1": { raw: "Status", bold: true, bg: "#312e81", color: "#ffffff" },
+            "D1": { raw: "Priority", bold: true, bg: "#312e81", color: "#ffffff" },
+            "E1": { raw: "Due Date", bold: true, bg: "#312e81", color: "#ffffff" },
+            "A2": { raw: "Excel Spreadsheet Upgrade" }, "B2": { raw: "Dev Team" }, "C2": { raw: "Completed" }, "D2": { raw: "Urgent" }, "E2": { raw: "2026-08-30" },
+            "A3": { raw: "Public Share Modal Fix" }, "B3": { raw: "Dev Team" }, "C3": { raw: "Completed" }, "D3": { raw: "High" }, "E3": { raw: "2026-08-30" },
+            "A4": { raw: "Formula Engine Optimization" }, "B4": { raw: "Engineers" }, "C4": { raw: "In Progress" }, "D4": { raw: "Medium" }, "E4": { raw: "2026-09-02" }
+        };
+    } else if (templateKey === "sales") {
+        excelGridData = {
+            "A1": { raw: "Quarter", bold: true, bg: "#065f46", color: "#ffffff" },
+            "B1": { raw: "Revenue ($)", bold: true, bg: "#065f46", color: "#ffffff" },
+            "A2": { raw: "Q1 2026" }, "B2": { raw: "12500" },
+            "A3": { raw: "Q2 2026" }, "B3": { raw: "15800" },
+            "A4": { raw: "Q3 2026" }, "B4": { raw: "18200" },
+            "A5": { raw: "Q4 2026" }, "B5": { raw: "21000" },
+            "A6": { raw: "TOTAL REVENUE", bold: true, bg: "#dcfce7", color: "#065f46" },
+            "B6": { raw: "=SUM(B2:B5)", bold: true, bg: "#dcfce7", color: "#065f46" },
+            "A7": { raw: "AVG QUARTERLY", bold: true, bg: "#e0f2fe", color: "#0369a1" },
+            "B7": { raw: "=AVERAGE(B2:B5)", bold: true, bg: "#e0f2fe", color: "#0369a1" }
         };
     }
     renderExcelGrid();
@@ -2966,7 +3027,7 @@ function exportGridToExcel() {
 
     const titleInput = document.getElementById("excel-sheet-title");
     const title = ((titleInput ? titleInput.value : "") || "scriptvault_spreadsheet").replace(/[^a-zA-Z0-9_-]/g, "_");
-    
+
     const data = [];
     for (let r = 1; r <= excelRows; r++) {
         const row = [];
@@ -3014,9 +3075,6 @@ function exportGridToCSV() {
     showToast("CSV exported successfully!", "success");
 }
 
-// ====================================================
-// RICH NOTEPAD TOOLBAR & FORMATTING SUITE
-// ====================================================
 function applyNotepadFormat(type) {
     const textarea = document.getElementById("note-content-input");
     if (!textarea) return;
@@ -3085,7 +3143,7 @@ function applyNotepadFormat(type) {
         selectStart = start + 1;
         selectEnd = selectStart + text.length;
     } else if (type === "codeblock") {
-        const text = selectedText || "// Code block";
+        const text = selectedText || "Code block";
         replacement = `\n\`\`\`javascript\n${text}\n\`\`\`\n`;
         selectStart = start + 15;
         selectEnd = selectStart + text.length;
@@ -3158,7 +3216,6 @@ function toggleFocusWritingMode() {
     showToast("Focus mode toggled (Click button again to exit)", "info");
 }
 
-// MULTI-FORMAT EXPORT ENGINE (PDF, ZIP, EXCEL, TXT)
 function exportCurrentNotePDF() {
     const titleInput = document.getElementById("note-title-input");
     const contentInput = document.getElementById("note-content-input");
@@ -3261,9 +3318,6 @@ function exportAllNotesExcel() {
     window.location.href = `/notes/export/excel?workspace_id=${activeWorkspaceId}`;
 }
 
-// ====================================================
-// MULTI-CHANNEL SHARE SUITE
-// ====================================================
 let currentShareObj = { type: 'note', id: null, title: '', content: '' };
 
 async function openShareModal(type = 'note', id = null) {
@@ -3397,7 +3451,7 @@ function toggleExportMenu(dropdownId) {
     const menu = document.getElementById(dropdownId);
     if (!menu) return;
     const isOpen = menu.style.display === "block";
-    
+
     document.querySelectorAll(".export-dropdown-menu").forEach(m => m.style.display = "none");
     menu.style.display = isOpen ? "none" : "block";
 }
@@ -3408,9 +3462,6 @@ document.addEventListener("click", (e) => {
     }
 });
 
-// ====================================================
-// MULTI-FORMAT EXPORT ENGINE (PDF, ZIP, EXCEL, TXT)
-// ====================================================
 function exportCurrentNotePDF() {
     const titleInput = document.getElementById("note-title-input");
     const contentInput = document.getElementById("note-content-input");
@@ -3522,7 +3573,6 @@ function exportAllNotesZip() {
     });
 }
 
-// Explicitly expose share & export functions on window object for inline HTML onclick attributes
 window.openShareModal = openShareModal;
 window.closeShareModal = closeShareModal;
 window.copyShareModalLink = copyShareModalLink;

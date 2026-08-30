@@ -240,7 +240,7 @@ async def get_snippets(
         except Exception:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid workspace ID.")
     else:
-        # Find first/default workspace
+
         ws = db.workspaces.find_one({"user_id": user_uid})
         if not ws:
             ws_oid = db.workspaces.insert_one({
@@ -517,12 +517,13 @@ async def search_snippets(
         results = [format_snippet(s) for s in snippets_cursor]
         
         if q and q.strip() and len(results) == 0:
+            safe_query = re.escape(search_query)
             regex_filter = {
                 "user_id": user_uid,
                 "$or": [
-                    {"title": {"$regex": search_query, "$options": "i"}},
-                    {"tags": {"$regex": search_query, "$options": "i"}},
-                    {"code": {"$regex": search_query, "$options": "i"}}
+                    {"title": {"$regex": safe_query, "$options": "i"}},
+                    {"tags": {"$regex": safe_query, "$options": "i"}},
+                    {"code": {"$regex": safe_query, "$options": "i"}}
                 ]
             }
             if ws_oid:
@@ -956,10 +957,6 @@ async def update_user_profile(payload: UserProfileUpdateSchema, current_user: di
             detail=f"Database error while updating profile: {str(e)}"
         )
 
-# ==========================================
-# NOTES ENDPOINTS
-# ==========================================
-
 @router.get("/notes")
 async def get_notes(
     workspace_id: Optional[str] = None,
@@ -1078,10 +1075,6 @@ async def delete_note(id: str, current_user: dict = Depends(get_current_user)):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Database error during note deletion: {str(e)}"
         )
-
-# ==========================================
-# WORKSPACE & COLLECTIONS ENDPOINTS
-# ==========================================
 
 @router.get("/workspaces")
 async def get_workspaces(current_user: dict = Depends(get_current_user)):
@@ -1270,10 +1263,6 @@ async def update_collection(id: str, payload: CollectionUpdateSchema, current_us
     db.collections.update_one({"_id": coll_oid}, {"$set": {"name": name_clean}})
     return {"id": id, "name": name_clean}
 
-# ==========================================
-# MODIFIERS (PIN, ARCHIVE, VERSIONS)
-# ==========================================
-
 @router.post("/snippet/{id}/pin")
 async def toggle_pin_snippet(id: str, current_user: dict = Depends(get_current_user)):
     db = get_db()
@@ -1361,10 +1350,6 @@ async def restore_snippet_version(id: str, version_id: int, current_user: dict =
     updated_doc = db.snippets.find_one({"_id": obj_id})
     return format_snippet(updated_doc)
 
-# ==========================================
-# LOCAL AI ANALYSIS ENDPOINT
-# ==========================================
-
 @router.post("/snippets/ai-analyze")
 async def ai_analyze_snippet(payload: SnippetAIAnalyzeSchema, current_user: dict = Depends(get_current_user)):
     db = get_db()
@@ -1375,10 +1360,6 @@ async def ai_analyze_snippet(payload: SnippetAIAnalyzeSchema, current_user: dict
     from ai_analyzer import run_ai_analysis
     analysis = run_ai_analysis(payload.code, payload.language, other_snippets, payload.id)
     return analysis
-
-# ==========================================
-# EXCEL INTEGRATION ENDPOINTS
-# ==========================================
 
 @router.get("/snippets/export/excel")
 async def export_snippets_to_excel(
@@ -1401,13 +1382,13 @@ async def export_snippets_to_excel(
     ws = wb.active
     ws.title = "ScriptVault Snippets"
     
-    # Enable gridlines
+
     ws.views.sheetView[0].showGridLines = True
     
     headers = ["Title", "Language", "Tags", "Code Snippet", "Description", "Pinned", "Archived", "Created Date"]
     ws.append(headers)
     
-    # Header styling (Indigo background, bold white text)
+
     header_fill = PatternFill(start_color="4F46E5", end_color="4F46E5", fill_type="solid")
     header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
     header_alignment = Alignment(horizontal="left", vertical="center")
@@ -1418,7 +1399,7 @@ async def export_snippets_to_excel(
         cell.font = header_font
         cell.alignment = header_alignment
     
-    # Add Data Rows
+
     for snippet in snippets:
         tags_str = ", ".join(snippet.get("tags", [])) if isinstance(snippet.get("tags"), list) else str(snippet.get("tags", ""))
         created = snippet.get("created_at")
@@ -1436,7 +1417,7 @@ async def export_snippets_to_excel(
         ]
         ws.append(row_data)
         
-    # Formatting column widths
+
     for col in ws.columns:
         max_len = 0
         col_letter = get_column_letter(col[0].column)
@@ -1462,7 +1443,6 @@ async def export_snippets_to_excel(
             "Content-Disposition": f"attachment; filename=scriptvault_snippets_{file_timestamp}.xlsx"
         }
     )
-
 
 @router.get("/snippets/export/template")
 async def download_excel_template(current_user: dict = Depends(get_current_user)):
@@ -1530,7 +1510,6 @@ async def download_excel_template(current_user: dict = Depends(get_current_user)
         }
     )
 
-
 @router.post("/snippets/import/excel")
 async def import_snippets_from_excel(
     file: UploadFile = File(...),
@@ -1543,7 +1522,7 @@ async def import_snippets_from_excel(
     db = get_db()
     user_uid = ObjectId(current_user["_id"])
     
-    # Determine target workspace
+
     ws_oid = None
     if workspace_id:
         try:
@@ -1575,7 +1554,7 @@ async def import_snippets_from_excel(
     if not rows:
         raise HTTPException(status_code=400, detail="The uploaded Excel file is empty.")
         
-    # Header detection
+
     headers = [str(cell).strip().lower() if cell is not None else "" for cell in rows[0]]
     
     title_idx = -1
@@ -1666,10 +1645,6 @@ async def import_snippets_from_excel(
         "skipped_count": skipped_count,
         "message": f"Successfully imported {imported_count} snippet(s) from Excel file."
     }
-
-# ==========================================
-# PUBLIC SHARE & NOTES EXCEL EXPORT ENDPOINTS
-# ==========================================
 
 @router.get("/public/note/{id}")
 async def get_public_note(id: str):
@@ -1796,5 +1771,4 @@ async def export_notes_to_excel(
             "Content-Disposition": f"attachment; filename={filename}"
         }
     )
-
 

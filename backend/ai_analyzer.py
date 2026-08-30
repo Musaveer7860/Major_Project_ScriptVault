@@ -35,14 +35,13 @@ LIB_DESCRIPTIONS = {
     "subprocess": "Spawning new processes and piping standard streams"
 }
 
-
 def compute_similarity(code1: str, code2: str) -> float:
     """Computes Jaccard similarity based on cleaned lines of code."""
     def get_clean_lines(code: str) -> set:
         lines = []
         for line in code.splitlines():
             line_strip = line.strip()
-            # Ignore comments and empty lines
+
             if line_strip and not line_strip.startswith(('#', '//', '/*', '*')):
                 lines.append(line_strip)
         return set(lines)
@@ -93,22 +92,21 @@ def analyze_complexity(code: str, language: str) -> Tuple[str, str]:
     has_recursion = False
     has_binary_search = False
     
-    # Simple bounds check for binary search
+
     if "binarysearch" in code.lower() or "binary_search" in code.lower() or ("mid =" in code and ("/ 2" in code or ">> 1" in code)):
         has_binary_search = True
         
-    # Check recursion based on calls (very basic match)
+
     func_names = re.findall(r'(?:def|function|void|int|double)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(', code)
     for fname in func_names:
         if fname not in ("main", "print", "printf", "cout", "cin"):
-            # Check if function calls itself
+
             call_pattern = rf'\b{fname}\b'
             matches = re.findall(call_pattern, code)
-            if len(matches) > 1: # Defined and called
+            if len(matches) > 1:
                 has_recursion = True
                 break
 
-    # Estimate loop nesting depth using bracket count or indentation
     for line in lines:
         is_loop = False
         if lang == "python":
@@ -123,10 +121,9 @@ def analyze_complexity(code: str, language: str) -> Tuple[str, str]:
             if loop_depth > max_loop_depth:
                 max_loop_depth = loop_depth
         elif "}" in line or (lang == "python" and line.startswith("def ")):
-            # Decrease depth
+
             loop_depth = max(0, loop_depth - 1)
 
-    # Estimate Time
     if has_recursion:
         time_comp = "O(2^N) - Exponential (Recursion detected)"
         space_comp = "O(N) - Linear recursion stack"
@@ -153,7 +150,7 @@ def analyze_bugs(code: str, language: str) -> List[str]:
     bugs = []
     lang = language.lower()
     
-    # 1. Bracket mismatch checks (all languages)
+
     brackets = {
         '(': ')',
         '{': '}',
@@ -174,11 +171,9 @@ def analyze_bugs(code: str, language: str) -> List[str]:
     if stack and len(bugs) == 0:
         bugs.append("Unclosed opening brackets detected at end of file.")
 
-    # 2. Division by zero check
     if re.search(r'/\s*0(?:\.0*)?\b', code):
         bugs.append("Potential Division by Zero error detected.")
 
-    # Language specific linting rules
     if lang == "python":
         if re.search(r'^\s*print\s+["\'][^"\']*["\']\s*$', code, re.MULTILINE):
             bugs.append("Syntax Error: print statement missing parentheses (Python 3 standard).")
@@ -248,7 +243,7 @@ def generate_explanation(code: str, language: str) -> str:
     lines = code.splitlines()
     num_lines = len(lines)
     
-    # 1. Parse Imports
+
     imports = []
     if language.lower() == "python":
         imports = re.findall(r'^(?:import|from)\s+([a-zA-Z0-9_]+)', code, re.MULTILINE)
@@ -260,11 +255,11 @@ def generate_explanation(code: str, language: str) -> str:
     
     imports = sorted(list(set(imports)))
     
-    # 2. Parse Classes
+
     classes = re.findall(r'\bclass\s+([a-zA-Z0-9_]+)', code)
     classes = sorted(list(set(classes)))
     
-    # 3. Parse Functions
+
     funcs = []
     if language.lower() == "python":
         funcs = re.findall(r'\bdef\s+([a-zA-Z0-9_]+)\s*\((.*?)\)', code)
@@ -282,7 +277,7 @@ def generate_explanation(code: str, language: str) -> str:
                 
     funcs = sorted(list(set(funcs)), key=lambda x: x[0])
     
-    # 4. Parse Variables (simple ones)
+
     variables = re.findall(r'\b([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*([^;\n]+)', code)
     var_list = []
     seen_vars = set()
@@ -294,7 +289,7 @@ def generate_explanation(code: str, language: str) -> str:
                 var_list.append((vname, val_clean))
                 seen_vars.add(vname)
                 
-    # 5. Parse Output messages
+
     outputs = []
     raw_outputs = re.findall(r'(?:print|console\.log|println|printf)\s*\(\s*f?["\'](.*?)["\']', code)
     cout_outputs = re.findall(r'cout\s*<<\s*["\'](.*?)["\']', code)
@@ -389,7 +384,6 @@ def generate_explanation(code: str, language: str) -> str:
         explanation += "1. The program executes linearly from top to bottom, evaluating expressions sequentially.\n"
         
     return explanation
-
 
 def generate_tags(code: str, language: str) -> List[str]:
     """Generates tag suggestions based on code content."""
