@@ -2063,7 +2063,14 @@ async function selectNote(noteId) {
         const note = await response.json();
 
         document.getElementById("note-title-input").value = note.title || "";
-        document.getElementById("note-content-input").value = note.content || "";
+        const noteEditor = document.getElementById("note-content-input");
+        if (noteEditor) {
+            if ("innerHTML" in noteEditor) {
+                noteEditor.innerHTML = note.content || "";
+            } else {
+                noteEditor.value = note.content || "";
+            }
+        }
 
         toggleNoteTab('edit');
         updateNotepadStats();
@@ -2113,7 +2120,7 @@ async function saveCurrentNote(targetNoteId = activeNoteId) {
     if (!titleInput || !contentInput) return;
 
     const title = titleInput.value.trim() || "Untitled Note";
-    const content = contentInput.value;
+    const content = contentInput.innerHTML !== undefined ? contentInput.innerHTML : (contentInput.value || "");
 
     const saveStatus = document.getElementById("note-save-status");
     if (saveStatus) saveStatus.textContent = "Saving...";
@@ -2799,31 +2806,72 @@ function getCellRangeValues(startRef, endRef) {
     return values;
 }
 
+let excelUndoStack = [];
+let excelRedoStack = [];
+const MAX_EXCEL_STACK = 30;
+
+function pushExcelHistory() {
+    excelUndoStack.push(JSON.stringify(excelGridData));
+    if (excelUndoStack.length > MAX_EXCEL_STACK) {
+        excelUndoStack.shift();
+    }
+    excelRedoStack = [];
+}
+
+function undoExcelAction() {
+    if (excelUndoStack.length === 0) {
+        showToast("Nothing to undo in Excel", "info");
+        return;
+    }
+    excelRedoStack.push(JSON.stringify(excelGridData));
+    const previousState = excelUndoStack.pop();
+    excelGridData = JSON.parse(previousState);
+    renderExcelGrid();
+    showToast("Undid last Excel action", "info");
+}
+
+function redoExcelAction() {
+    if (excelRedoStack.length === 0) {
+        showToast("Nothing to redo in Excel", "info");
+        return;
+    }
+    excelUndoStack.push(JSON.stringify(excelGridData));
+    const nextState = excelRedoStack.pop();
+    excelGridData = JSON.parse(nextState);
+    renderExcelGrid();
+    showToast("Redid Excel action", "info");
+}
+
 function addExcelRow() {
+    pushExcelHistory();
     excelRows++;
     renderExcelGrid();
 }
 
 function deleteExcelRow() {
     if (excelRows > 1) {
+        pushExcelHistory();
         excelRows--;
         renderExcelGrid();
     }
 }
 
 function addExcelCol() {
+    pushExcelHistory();
     excelCols++;
     renderExcelGrid();
 }
 
 function deleteExcelCol() {
     if (excelCols > 1) {
+        pushExcelHistory();
         excelCols--;
         renderExcelGrid();
     }
 }
 
 function insertExcelFormula(funcName) {
+    pushExcelHistory();
     if (!activeCellRef) activeCellRef = "A1";
     const formulaBar = document.getElementById("excel-formula-bar");
     let formula = "";
@@ -2894,6 +2942,7 @@ function addWorksheetTab() {
 
 function formatExcelCell(type, val) {
     if (!activeCellRef) return;
+    pushExcelHistory();
     if (!excelGridData[activeCellRef]) excelGridData[activeCellRef] = { raw: "", val: "" };
 
     if (type === "bold") excelGridData[activeCellRef].bold = !excelGridData[activeCellRef].bold;
@@ -2907,6 +2956,7 @@ function formatExcelCell(type, val) {
 
 function clearExcelGrid() {
     if (confirm("Are you sure you want to clear all cells in this spreadsheet?")) {
+        pushExcelHistory();
         excelGridData = {};
         renderExcelGrid();
         showToast("Excel spreadsheet cleared.", "info");
@@ -2914,6 +2964,7 @@ function clearExcelGrid() {
 }
 
 function loadExcelTemplate(templateKey) {
+    pushExcelHistory();
     excelGridData = {};
     if (templateKey === "snippets") {
         excelGridData = {
@@ -3076,116 +3127,88 @@ function exportGridToCSV() {
 }
 
 function applyNotepadFormat(type) {
-    const textarea = document.getElementById("note-content-input");
-    if (!textarea) return;
+    const editor = document.getElementById("note-content-input");
+    if (!editor) return;
+    editor.focus();
 
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selectedText = textarea.value.substring(start, end);
-
-    let replacement = "";
-    let selectStart = start;
-    let selectEnd = end;
-
-    if (type === "bold") {
-        const text = selectedText || "Bold text";
-        replacement = `**${text}**`;
-        selectStart = start + 2;
-        selectEnd = selectStart + text.length;
-    } else if (type === "italic") {
-        const text = selectedText || "Italic text";
-        replacement = `*${text}*`;
-        selectStart = start + 1;
-        selectEnd = selectStart + text.length;
-    } else if (type === "underline") {
-        const text = selectedText || "Underlined text";
-        replacement = `<u>${text}</u>`;
-        selectStart = start + 3;
-        selectEnd = selectStart + text.length;
-    } else if (type === "strikethrough") {
-        const text = selectedText || "Strikethrough text";
-        replacement = `~~${text}~~`;
-        selectStart = start + 2;
-        selectEnd = selectStart + text.length;
-    } else if (type === "h1") {
-        const text = selectedText || "Heading 1";
-        replacement = `\n# ${text}\n`;
-        selectStart = start + 3;
-        selectEnd = selectStart + text.length;
-    } else if (type === "h2") {
-        const text = selectedText || "Heading 2";
-        replacement = `\n## ${text}\n`;
-        selectStart = start + 4;
-        selectEnd = selectStart + text.length;
-    } else if (type === "h3") {
-        const text = selectedText || "Heading 3";
-        replacement = `\n### ${text}\n`;
-        selectStart = start + 5;
-        selectEnd = selectStart + text.length;
-    } else if (type === "ul") {
-        const text = selectedText || "List item";
-        replacement = `\n- ${text}\n`;
-        selectStart = start + 3;
-        selectEnd = selectStart + text.length;
-    } else if (type === "ol") {
-        const text = selectedText || "List item";
-        replacement = `\n1. ${text}\n`;
-        selectStart = start + 4;
-        selectEnd = selectStart + text.length;
-    } else if (type === "checklist") {
-        const text = selectedText || "Task item";
-        replacement = `\n- [ ] ${text}\n`;
-        selectStart = start + 7;
-        selectEnd = selectStart + text.length;
-    } else if (type === "code") {
-        const text = selectedText || "code";
-        replacement = `\`${text}\``;
-        selectStart = start + 1;
-        selectEnd = selectStart + text.length;
-    } else if (type === "codeblock") {
-        const text = selectedText || "Code block";
-        replacement = `\n\`\`\`javascript\n${text}\n\`\`\`\n`;
-        selectStart = start + 15;
-        selectEnd = selectStart + text.length;
-    } else if (type === "quote") {
-        const text = selectedText || "Quote";
-        replacement = `\n> ${text}\n`;
-        selectStart = start + 3;
-        selectEnd = selectStart + text.length;
-    } else if (type === "timestamp") {
-        const stamp = `[${new Date().toLocaleString()}]`;
-        replacement = ` ${stamp} `;
-        selectStart = start + 1;
-        selectEnd = selectStart + stamp.length;
+    try {
+        if (type === "bold") {
+            document.execCommand("bold", false, null);
+        } else if (type === "italic") {
+            document.execCommand("italic", false, null);
+        } else if (type === "underline") {
+            document.execCommand("underline", false, null);
+        } else if (type === "strikethrough") {
+            document.execCommand("strikeThrough", false, null);
+        } else if (type === "h1") {
+            document.execCommand("formatBlock", false, "<h1>");
+        } else if (type === "h2") {
+            document.execCommand("formatBlock", false, "<h2>");
+        } else if (type === "h3") {
+            document.execCommand("formatBlock", false, "<h3>");
+        } else if (type === "ul") {
+            document.execCommand("insertUnorderedList", false, null);
+        } else if (type === "ol") {
+            document.execCommand("insertOrderedList", false, null);
+        } else if (type === "checklist") {
+            document.execCommand("insertHTML", false, '<div><input type="checkbox"> &nbsp;Task Item</div>');
+        } else if (type === "code") {
+            document.execCommand("formatBlock", false, "<pre>");
+        } else if (type === "quote") {
+            document.execCommand("formatBlock", false, "<blockquote>");
+        } else if (type === "timestamp") {
+            document.execCommand("insertHTML", false, `<span>[${new Date().toLocaleString()}]</span> &nbsp;`);
+        } else if (type === "undo") {
+            document.execCommand("undo", false, null);
+        } else if (type === "redo") {
+            document.execCommand("redo", false, null);
+        }
+    } catch (e) {
+        console.error("ExecCommand error:", e);
     }
 
-    textarea.setRangeText(replacement, start, end, 'end');
-    textarea.focus();
-    if (!selectedText) {
-        textarea.setSelectionRange(selectStart, selectEnd);
-    }
     onNoteContentChange();
-    updateNotepadStats();
 }
 
 function changeNotepadFont(fontVal) {
-    const textarea = document.getElementById("note-content-input");
+    const editor = document.getElementById("note-content-input");
     const preview = document.getElementById("note-preview-pane");
     let fontCss = "var(--font-ui)";
     if (fontVal === "serif") fontCss = "Georgia, serif";
     if (fontVal === "mono") fontCss = "var(--font-code)";
 
-    if (textarea) textarea.style.fontFamily = fontCss;
+    if (editor) editor.style.fontFamily = fontCss;
     if (preview) preview.style.fontFamily = fontCss;
     localStorage.setItem("notepadFont", fontVal);
 }
 
 function changeNotepadFontSize(sizeVal) {
-    const textarea = document.getElementById("note-content-input");
+    const editor = document.getElementById("note-content-input");
     const preview = document.getElementById("note-preview-pane");
-    if (textarea) textarea.style.fontSize = sizeVal;
+    if (editor) editor.style.fontSize = sizeVal;
     if (preview) preview.style.fontSize = sizeVal;
     localStorage.setItem("notepadFontSize", sizeVal);
+}
+
+function updateNotepadStats() {
+    const editor = document.getElementById("note-content-input");
+    if (!editor) return;
+    const text = editor.innerText || editor.textContent || "";
+
+    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+    const chars = text.length;
+    const paras = text.trim() ? text.split(/\n\s*\n/).length : 0;
+    const readTime = Math.ceil(words / 200);
+
+    const elWords = document.getElementById("notepad-stat-words");
+    const elChars = document.getElementById("notepad-stat-chars");
+    const elParas = document.getElementById("notepad-stat-paras");
+    const elRead = document.getElementById("notepad-stat-readtime");
+
+    if (elWords) elWords.textContent = words;
+    if (elChars) elChars.textContent = chars;
+    if (elParas) elParas.textContent = paras;
+    if (elRead) elRead.textContent = readTime;
 }
 
 function updateNotepadStats() {
@@ -3221,7 +3244,7 @@ function exportCurrentNotePDF() {
     const contentInput = document.getElementById("note-content-input");
     const rawTitle = titleInput ? titleInput.value : "Untitled Note";
     const title = (rawTitle || "notepad_note").replace(/[^a-zA-Z0-9_-]/g, "_");
-    const content = contentInput ? contentInput.value : "";
+    const contentHtml = contentInput ? (contentInput.innerHTML !== undefined ? contentInput.innerHTML : contentInput.value) : "";
 
     const exportDiv = document.createElement("div");
     exportDiv.style.position = "absolute";
@@ -3236,7 +3259,7 @@ function exportCurrentNotePDF() {
         <h1 style="color:#09090b; border-bottom:2px solid #6366f1; padding-bottom:8px; margin-top:0;">${escapeHtml(rawTitle)}</h1>
         <p style="color:#64748b; font-size:12px; margin-bottom:15px;">ScriptVault Notepad Export &bull; Date: ${new Date().toLocaleDateString()}</p>
         <hr style="border:0; border-top:1px solid #e2e8f0; margin:15px 0;">
-        <div style="font-size:14px; line-height:1.6; color:#1e293b;" class="markdown-body">${window.marked ? marked.parse(content) : escapeHtml(content).replace(/\n/g, '<br>')}</div>
+        <div style="font-size:14px; line-height:1.6; color:#1e293b;" class="markdown-body">${contentHtml}</div>
     `;
 
     document.body.appendChild(exportDiv);
@@ -3272,11 +3295,12 @@ function exportCurrentNoteZIP() {
     const titleInput = document.getElementById("note-title-input");
     const contentInput = document.getElementById("note-content-input");
     const title = ((titleInput ? titleInput.value : "") || "notepad_note").replace(/[^a-zA-Z0-9_-]/g, "_");
-    const content = contentInput ? contentInput.value : "";
+    const contentText = contentInput ? (contentInput.innerText || contentInput.textContent || "") : "";
+    const contentHtml = contentInput ? (contentInput.innerHTML || "") : "";
 
     const zip = new JSZip();
-    zip.file(`${title}.txt`, content);
-    zip.file(`${title}.md`, `# ${titleInput ? titleInput.value : "Note"}\n\n${content}`);
+    zip.file(`${title}.txt`, contentText);
+    zip.file(`${title}.html`, `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${titleInput ? titleInput.value : "Note"}</title></head><body>${contentHtml}</body></html>`);
     zip.file("INFO.txt", `Exported from ScriptVault Notepad\nTitle: ${titleInput ? titleInput.value : "Note"}\nDate: ${new Date().toLocaleString()}`);
 
     zip.generateAsync({ type: "blob" }).then(function(blob) {
@@ -3294,9 +3318,9 @@ function exportCurrentNoteTXT() {
     const titleInput = document.getElementById("note-title-input");
     const contentInput = document.getElementById("note-content-input");
     const title = ((titleInput ? titleInput.value : "") || "notepad_note").replace(/[^a-zA-Z0-9_-]/g, "_");
-    const content = contentInput ? contentInput.value : "";
+    const contentText = contentInput ? (contentInput.innerText || contentInput.textContent || "") : "";
 
-    const blob = new Blob([content], { type: "text/plain;charset=utf-8;" });
+    const blob = new Blob([contentText], { type: "text/plain;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

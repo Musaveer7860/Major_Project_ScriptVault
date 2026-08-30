@@ -6,7 +6,7 @@
     <title>Dashboard - ScriptVault</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
-    <link rel="stylesheet" href="css/style.css?v=400">
+    <link rel="stylesheet" href="css/style.css?v=500">
     
     <link rel="stylesheet" data-name="vs/editor/editor.main" href="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.39.0/min/vs/editor/editor.main.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.39.0/min/vs/loader.min.js"></script>
@@ -308,9 +308,12 @@
 
                                 
                                 <div id="notepad-toolbar" style="display: flex; align-items: center; gap: 0.2rem; padding: 0.35rem 1rem; background: #f8fafc; border-bottom: 1px solid var(--border-color); overflow-x: auto; flex-wrap: wrap;">
+                                    <button class="notepad-tool-btn" onclick="applyNotepadFormat('undo')" title="Undo (Ctrl+Z)"><i class="fa-solid fa-rotate-left" style="color: #6366f1;"></i></button>
+                                    <button class="notepad-tool-btn" onclick="applyNotepadFormat('redo')" title="Redo (Ctrl+Y)"><i class="fa-solid fa-rotate-right" style="color: #6366f1;"></i></button>
+                                    <div class="toolbar-divider"></div>
                                     <button class="notepad-tool-btn" onclick="applyNotepadFormat('bold')" title="Bold (Ctrl+B)"><i class="fa-solid fa-bold"></i></button>
                                     <button class="notepad-tool-btn" onclick="applyNotepadFormat('italic')" title="Italic (Ctrl+I)"><i class="fa-solid fa-italic"></i></button>
-                                    <button class="notepad-tool-btn" onclick="applyNotepadFormat('underline')" title="Underline"><i class="fa-solid fa-underline"></i></button>
+                                    <button class="notepad-tool-btn" onclick="applyNotepadFormat('underline')" title="Underline (Ctrl+U)"><i class="fa-solid fa-underline"></i></button>
                                     <button class="notepad-tool-btn" onclick="applyNotepadFormat('strikethrough')" title="Strikethrough"><i class="fa-solid fa-strikethrough"></i></button>
                                     <div class="toolbar-divider"></div>
                                     <button class="notepad-tool-btn" onclick="applyNotepadFormat('h1')" title="Heading 1">H1</button>
@@ -321,8 +324,7 @@
                                     <button class="notepad-tool-btn" onclick="applyNotepadFormat('ol')" title="Numbered List"><i class="fa-solid fa-list-ol"></i></button>
                                     <button class="notepad-tool-btn" onclick="applyNotepadFormat('checklist')" title="Task Checklist"><i class="fa-regular fa-square-check"></i></button>
                                     <div class="toolbar-divider"></div>
-                                    <button class="notepad-tool-btn" onclick="applyNotepadFormat('code')" title="Inline Code"><i class="fa-solid fa-code"></i></button>
-                                    <button class="notepad-tool-btn" onclick="applyNotepadFormat('codeblock')" title="Code Block"><i class="fa-solid fa-laptop-code"></i></button>
+                                    <button class="notepad-tool-btn" onclick="applyNotepadFormat('code')" title="Code Block"><i class="fa-solid fa-code"></i></button>
                                     <button class="notepad-tool-btn" onclick="applyNotepadFormat('quote')" title="Quote Block"><i class="fa-solid fa-quote-left"></i></button>
                                     <button class="notepad-tool-btn" onclick="applyNotepadFormat('timestamp')" title="Insert Timestamp"><i class="fa-regular fa-clock"></i></button>
                                     <div class="toolbar-divider"></div>
@@ -333,7 +335,7 @@
                                     <input type="text" id="note-title-input" class="note-editor-title" placeholder="Untitled Notepad Note" style="font-size: 1.5rem; font-weight: 700; border: none; outline: none; margin-bottom: 1rem; width: 100%; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; color: #09090b;" oninput="onNoteContentChange()">
                                     
                                     <div id="note-edit-pane" style="flex: 1; display: flex; flex-direction: column;">
-                                        <textarea id="note-content-input" class="note-editor-textarea" placeholder="Type your notepad notes here..." style="flex: 1; border: none; outline: none; resize: none; font-size: 1rem; line-height: 1.6; width: 100%; min-height: 320px; font-family: var(--font-ui); color: #09090b;" oninput="onNoteContentChange()"></textarea>
+                                        <div id="note-content-input" class="note-editor-textarea markdown-body" contenteditable="true" style="flex: 1; border: none; outline: none; font-size: 1rem; line-height: 1.6; width: 100%; min-height: 320px; font-family: var(--font-ui); color: #09090b; overflow-y: auto;" oninput="onNoteContentChange()"></div>
                                     </div>
                                     
                                     <div id="note-preview-pane" style="display: none; flex: 1; font-size: 0.95rem; line-height: 1.6; color: var(--text-primary); outline: none; overflow-y: auto;" class="markdown-body">
@@ -477,6 +479,11 @@
 
                     <div style="background: #f8fafc; border: 1px solid var(--border-color); border-top: none; padding: 0.6rem 1rem; display: flex; flex-direction: column; gap: 0.6rem;">
                         <div style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+                            <button class="notepad-tool-btn" onclick="undoExcelAction()" title="Undo (Ctrl+Z)"><i class="fa-solid fa-rotate-left" style="color: #6366f1;"></i> Undo</button>
+                            <button class="notepad-tool-btn" onclick="redoExcelAction()" title="Redo (Ctrl+Y)"><i class="fa-solid fa-rotate-right" style="color: #6366f1;"></i> Redo</button>
+                            
+                            <div class="toolbar-divider"></div>
+                            
                             <button class="notepad-tool-btn" onclick="addExcelRow()" title="Add Row"><i class="fa-solid fa-plus" style="color: #10b981;"></i> Row</button>
                             <button class="notepad-tool-btn" onclick="deleteExcelRow()" title="Delete Last Row"><i class="fa-solid fa-minus" style="color: #ef4444;"></i> Row</button>
                             <button class="notepad-tool-btn" onclick="addExcelCol()" title="Add Column"><i class="fa-solid fa-plus" style="color: #10b981;"></i> Col</button>
@@ -847,6 +854,6 @@
 </script>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.3.0/marked.min.js"></script>
-    <script src="js/dashboard.js?v=400"></script>
+    <script src="js/dashboard.js?v=500"></script>
 </body>
 </html>
