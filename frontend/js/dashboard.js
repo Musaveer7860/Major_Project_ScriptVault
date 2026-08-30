@@ -2065,10 +2065,14 @@ async function selectNote(noteId) {
         document.getElementById("note-title-input").value = note.title || "";
         const noteEditor = document.getElementById("note-content-input");
         if (noteEditor) {
+            let rawContent = note.content || "";
+            if (rawContent && !rawContent.includes("<") && window.marked) {
+                rawContent = marked.parse(rawContent);
+            }
             if ("innerHTML" in noteEditor) {
-                noteEditor.innerHTML = note.content || "";
+                noteEditor.innerHTML = rawContent;
             } else {
-                noteEditor.value = note.content || "";
+                noteEditor.value = rawContent;
             }
         }
 
@@ -3193,7 +3197,7 @@ function changeNotepadFontSize(sizeVal) {
 function updateNotepadStats() {
     const editor = document.getElementById("note-content-input");
     if (!editor) return;
-    const text = editor.innerText || editor.textContent || "";
+    const text = editor.innerText || editor.textContent || editor.value || "";
 
     const words = text.trim() ? text.trim().split(/\s+/).length : 0;
     const chars = text.length;
@@ -3205,28 +3209,7 @@ function updateNotepadStats() {
     const elParas = document.getElementById("notepad-stat-paras");
     const elRead = document.getElementById("notepad-stat-readtime");
 
-    if (elWords) elWords.textContent = words;
-    if (elChars) elChars.textContent = chars;
-    if (elParas) elParas.textContent = paras;
-    if (elRead) elRead.textContent = readTime;
-}
-
-function updateNotepadStats() {
-    const textarea = document.getElementById("note-content-input");
-    if (!textarea) return;
-    const text = textarea.value || "";
-
-    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
-    const chars = text.length;
-    const paras = text.trim() ? text.split(/\n\s*\n/).length : 0;
-    const readTime = Math.ceil(words / 200);
-
-    const elWords = document.getElementById("notepad-stat-words");
-    const elChars = document.getElementById("notepad-stat-chars");
-    const elParas = document.getElementById("notepad-stat-paras");
-    const elRead = document.getElementById("notepad-stat-readtime");
-
-    if (elWords) elWords.textContent = words;
+    if (elWords) elWords.textContent = words.toLocaleString();
     if (elChars) elChars.textContent = chars.toLocaleString();
     if (elParas) elParas.textContent = paras;
     if (elRead) elRead.textContent = readTime;
