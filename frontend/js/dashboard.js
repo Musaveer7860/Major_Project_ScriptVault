@@ -3608,6 +3608,72 @@ window.toggleExportMenu = toggleExportMenu;
 window.exportCurrentNotePDF = exportCurrentNotePDF;
 window.exportCurrentNoteZIP = exportCurrentNoteZIP;
 window.exportCurrentNoteTXT = exportCurrentNoteTXT;
+
+document.addEventListener("keydown", function(e) {
+    const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+    const activeEl = document.activeElement;
+    const noteEditor = document.getElementById("note-content-input");
+    const sheetsView = document.getElementById("sheets-view");
+
+    if (sheetsView && sheetsView.style.display !== "none") {
+        if (isCtrlOrCmd) {
+            const key = e.key.toLowerCase();
+            if (key === 'z') {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    redoExcelAction();
+                } else {
+                    undoExcelAction();
+                }
+            } else if (key === 'y') {
+                e.preventDefault();
+                redoExcelAction();
+            }
+        }
+    }
+
+    if (noteEditor && (activeEl === noteEditor || noteEditor.contains(activeEl))) {
+        if (isCtrlOrCmd) {
+            const key = e.key.toLowerCase();
+            if (key === 'b') {
+                e.preventDefault();
+                applyNotepadFormat('bold');
+            } else if (key === 'i') {
+                e.preventDefault();
+                applyNotepadFormat('italic');
+            } else if (key === 'u') {
+                e.preventDefault();
+                applyNotepadFormat('underline');
+            } else if (key === 's') {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    applyNotepadFormat('strikethrough');
+                } else {
+                    saveCurrentNote();
+                }
+            } else if (key === 'z') {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    applyNotepadFormat('redo');
+                } else {
+                    applyNotepadFormat('undo');
+                }
+            } else if (key === 'y') {
+                e.preventDefault();
+                applyNotepadFormat('redo');
+            } else if (key === '1' && e.altKey) {
+                e.preventDefault();
+                applyNotepadFormat('h1');
+            } else if (key === '2' && e.altKey) {
+                e.preventDefault();
+                applyNotepadFormat('h2');
+            } else if (key === '3' && e.altKey) {
+                e.preventDefault();
+                applyNotepadFormat('h3');
+            }
+        }
+    }
+});
 window.exportCurrentNoteExcel = exportCurrentNoteExcel;
 window.exportAllNotesExcel = exportAllNotesExcel;
 window.exportAllNotesZip = exportAllNotesZip;
